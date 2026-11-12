@@ -66,6 +66,12 @@ body.play #hud{display:block}
 #marker{position:absolute;width:0;height:0;display:none}
 #marker div{position:absolute;left:-9px;top:-9px;width:18px;height:18px;border:2px solid #f2cc5a;transform:rotate(45deg);background:rgba(242,204,90,.25);box-shadow:0 0 6px rgba(0,0,0,.6)}
 #marker span{position:absolute;left:-30px;width:60px;top:14px;text-align:center;font-size:12px;color:#f2cc5a;text-shadow:0 1px 2px #000}
+#pick{position:absolute;left:50%;top:72%;transform:translateX(-50%);display:none;text-shadow:0 1px 3px #000;font-size:clamp(13px,1.7vw,16px);background:rgba(0,0,0,.35);padding:4px 12px}
+#pick kbd{border:1px solid #ddd;padding:0 6px;border-radius:3px;font-family:Oswald}#pick b{color:#e9c46a}
+#scope{position:fixed;inset:0;z-index:9;pointer-events:none;display:none;background:radial-gradient(circle at center,transparent 0,transparent 33vh,rgba(0,0,0,.6) 33.4vh,#000 34vh)}
+#scope i{position:absolute;background:#000}#scope .h{left:0;right:0;top:50%;height:2px;margin-top:-1px}#scope .v{top:0;bottom:0;left:50%;width:2px;margin-left:-1px}
+#scope:after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#c22}
+#tPick{width:76px;height:44px;border-radius:8px;left:50%;margin-left:-38px;bottom:38%;display:none;border-color:#e9c46a}
 #fps{position:absolute;right:8px;bottom:4px;font-size:11px;color:#9f9;display:none}
 #timer{position:absolute;left:50%;top:50px;transform:translateX(-50%);font-size:28px;color:#ff6b4a;font-weight:700;display:none;text-shadow:0 2px 4px #000}
 /* menus */
@@ -119,6 +125,29 @@ body.play #hud{display:block}
 .stats span:nth-child(even){text-align:right;color:#e9c46a}
 #loading{background:#000;z-index:60}
 #loading .bar{width:240px;height:3px;background:#333;margin-top:14px}#loading .bar i{display:block;height:100%;width:0;background:#c0503a;transition:width .3s}
+/* loadout */
+#loadout{background:radial-gradient(ellipse at 30% 40%,#2b2a22,#0b0b09 75%)}
+.lo{width:100%;height:100%;display:flex;flex-direction:column;padding:12px 18px}
+.lohead{display:flex;align-items:center;gap:12px;flex-wrap:wrap;margin-bottom:8px}
+.lohead>span{font-size:clamp(20px,3vw,30px);letter-spacing:5px;font-weight:700}
+#loTabs{display:flex;gap:4px}
+#loTabs button{background:#25231c;border:1px solid #4a4536;color:#cfc6a8;font-family:Oswald;letter-spacing:2px;padding:6px 14px;cursor:pointer;font-size:14px}
+#loTabs button.on{background:#c0503a;border-color:#c0503a;color:#fff}
+.lohead .btn{padding:7px 18px;font-size:15px}
+.lobody{flex:1;display:grid;grid-template-columns:1.1fr 1fr 1fr;gap:12px;min-height:0}
+.locol{background:rgba(0,0,0,.35);border:1px solid #3a3628;overflow:auto;padding:10px;min-height:0}
+#loPrev{width:100%;height:auto;aspect-ratio:2/1;display:block;background:radial-gradient(ellipse at center,#4a4636,#1a1914)}
+#loInfo{margin:8px 0 4px}#loInfo b{font-size:clamp(18px,2.4vw,24px);letter-spacing:2px;display:block}#loInfo small{color:#c0503a;letter-spacing:2px;font-size:12px}
+.bar{display:grid;grid-template-columns:78px 1fr 30px;align-items:center;gap:8px;font-size:12px;color:#bdb49a;margin:5px 0}
+.bar .t{height:6px;background:#2d2a22;position:relative}.bar .t i{position:absolute;left:0;top:0;bottom:0;background:#e9e1c8}.bar .t em{position:absolute;top:0;bottom:0;background:#6fbf5a}.bar .t em.neg{background:#d0503a}
+.wcls{font-size:11px;letter-spacing:3px;color:#c0503a;margin:10px 0 4px}
+.witem{display:flex;justify-content:space-between;align-items:center;padding:7px 10px;margin:3px 0;background:#1d1c17;border:1px solid #33302a;cursor:pointer;font-size:14px;letter-spacing:1px}
+.witem:hover{border-color:#8a7f60}.witem.on{border-color:#e9c46a;background:#2f2b1e}.witem small{color:#8d8670;font-size:11px}
+.att{margin-bottom:10px}.att .l{font-size:11px;letter-spacing:3px;color:#c0503a;margin-bottom:4px}
+.att .opts{display:flex;flex-wrap:wrap;gap:4px}
+.att button{background:#1d1c17;border:1px solid #3c382c;color:#d6ceb6;font-family:Oswald;font-size:13px;padding:5px 9px;cursor:pointer}
+.att button.on{border-color:#e9c46a;background:#3a331f;color:#fff}.att button:disabled{opacity:.3;cursor:default}
+@media (max-height:500px){.lo{padding:6px 10px}.lobody{gap:6px}.locol{padding:6px}.witem{padding:4px 8px;font-size:12px}.bar{margin:2px 0}#loPrev{aspect-ratio:2.6/1}}
 /* touch */
 #touch{position:fixed;inset:0;z-index:15;display:none}
 body.play.touch #touch{display:block}
@@ -184,7 +213,9 @@ body.touch #tPause{top:8px;right:10px}
   <div id="timer"></div>
   <div id="ammo"><div id="wname"></div><div id="mag"></div><div id="nades"></div></div>
   <div id="fps"></div>
+  <div id="pick"></div>
 </div>
+<div id="scope"><i class="h"></i><i class="v"></i></div>
 
 <div id="touch">
   <div id="tlayer"></div>
@@ -200,6 +231,7 @@ body.touch #tPause{top:8px;right:10px}
   <div class="tb" id="tSwap">SWAP</div>
   <div class="tb" id="tAct">HOLD</div>
   <div class="tb" id="tPause">II</div>
+  <div class="tb" id="tPick">PICK UP</div>
 </div>
 
 <div class="scr" id="loading"><div style="letter-spacing:6px;font-size:20px">LOADING</div><div class="bar"><i id="lbar"></i></div></div>
@@ -208,6 +240,7 @@ body.touch #tPause{top:8px;right:10px}
   <div class="logo">IRON<br>REQUIEM<span>WORLD WAR II</span></div>
   <div class="mlist">
     <button class="mbtn" data-a="campaign">Campaign</button>
+    <button class="mbtn" data-a="loadout">Loadout</button>
     <button class="mbtn" data-a="settings">Settings</button>
     <button class="mbtn" data-a="controls">Controls</button>
   </div>
@@ -231,9 +264,16 @@ body.touch #tPause{top:8px;right:10px}
     <li>Clear the German trench line on the bluff</li>
     <li>Destroy the MG42 bunker covering the draw</li>
   </ul>
-  <div class="btns"><button class="btn" data-a="deploy">Deploy ▸</button><button class="btn g" data-a="back2">Back</button></div>
+  <div class="btns"><button class="btn" data-a="toLoadout">Choose Loadout ▸</button><button class="btn g" data-a="back2">Back</button></div>
 </div></div>
 
+<div class="scr" id="loadout"><div class="lo">
+  <div class="lohead"><span>LOADOUT</span><div id="loTabs"></div><div style="flex:1"></div><button class="btn g" data-a="loBack">Back</button><button class="btn" id="loDeploy" data-a="deploy">Deploy ▸</button></div>
+  <div class="lobody">
+    <div class="locol" id="loLeft"><canvas id="loPrev" width="520" height="260"></canvas><div id="loInfo"></div><div id="loBars"></div></div>
+    <div class="locol" id="loList"></div>
+    <div class="locol" id="loSmith"></div>
+  </div></div></div>
 <div class="scr" id="settings"><div class="panel">
   <h2>SETTINGS</h2>
   <div class="tabs" id="stabs"></div>
