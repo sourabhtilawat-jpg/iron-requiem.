@@ -89,7 +89,7 @@ export function effStats(wid, att){
   w.mob=b.mob+mob;w.scoped=w.att.optic!=='iron';
   if(w.att.mag==='ext')w.res=Math.round(w.res*1.3);
   // first-person pose
-  const P=b.m.pistol;w.hip=P?[.11,-.11,-.33]:[.15,-.165,-.34];
+  const P=b.m.pistol;w.hip=P?[.1,-.12,-.3]:[.12,-.17,-.27];
   return w;
 }
 // 0..1 values for the stat bars
