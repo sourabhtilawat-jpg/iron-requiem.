@@ -1,0 +1,6 @@
+{
+  "appId": "com.ironrequiem.game",
+  "appName": "Iron Requiem",
+  "webDir": "dist",
+  "android": { "backgroundColor": "#000000" }
+}
