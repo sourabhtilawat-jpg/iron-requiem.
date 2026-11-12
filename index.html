@@ -12,6 +12,7 @@ html,body{width:100%;height:100%;overflow:hidden;background:#000;font-family:'Os
 #c.grade{filter:contrast(1.1) saturate(.78) sepia(.13)}
 #grain{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;opacity:.06;mix-blend-mode:overlay}
 #vig{position:fixed;inset:0;pointer-events:none;background:radial-gradient(ellipse at center,transparent 50%,rgba(0,0,0,.7) 100%)}
+#dirt{position:fixed;inset:0;pointer-events:none;opacity:0;z-index:8;background:radial-gradient(circle at 18% 72%,rgba(70,55,35,.55) 0,rgba(70,55,35,0) 7%),radial-gradient(circle at 80% 30%,rgba(60,48,30,.45) 0,rgba(60,48,30,0) 9%),radial-gradient(circle at 62% 82%,rgba(80,62,40,.5) 0,rgba(80,62,40,0) 5%),radial-gradient(circle at 34% 22%,rgba(70,55,35,.35) 0,rgba(70,55,35,0) 6%),radial-gradient(circle at 90% 75%,rgba(50,40,28,.4) 0,rgba(50,40,28,0) 8%),radial-gradient(ellipse at center,transparent 55%,rgba(60,48,30,.45) 100%)}
 #blood{position:fixed;inset:0;pointer-events:none;opacity:0;background:radial-gradient(ellipse at center,transparent 30%,rgba(110,0,0,.5) 70%,rgba(60,0,0,.92) 100%)}
 #flashW{position:fixed;inset:0;pointer-events:none;background:#fff;opacity:0}
 .lb{position:fixed;left:0;right:0;height:0;background:#000;z-index:20;transition:height .8s ease;pointer-events:none}
@@ -71,6 +72,7 @@ body.play #hud{display:block}
 #scope{position:fixed;inset:0;z-index:9;pointer-events:none;display:none;background:radial-gradient(circle at center,transparent 0,transparent 33vh,rgba(0,0,0,.6) 33.4vh,#000 34vh)}
 #scope i{position:absolute;background:#000}#scope .h{left:0;right:0;top:50%;height:2px;margin-top:-1px}#scope .v{top:0;bottom:0;left:50%;width:2px;margin-left:-1px}
 #scope:after{content:'';position:absolute;left:50%;top:50%;width:6px;height:6px;margin:-3px;border-radius:50%;background:#c22}
+#tCam{width:40px;height:40px;right:58px;top:8px;border-radius:6px;font-size:10px}
 #tPick{width:76px;height:44px;border-radius:8px;left:50%;margin-left:-38px;bottom:38%;display:none;border-color:#e9c46a}
 #fps{position:absolute;right:8px;bottom:4px;font-size:11px;color:#9f9;display:none}
 #timer{position:absolute;left:50%;top:50px;transform:translateX(-50%);font-size:28px;color:#ff6b4a;font-weight:700;display:none;text-shadow:0 2px 4px #000}
@@ -167,7 +169,7 @@ body.play.touch #touch{display:block}
 #tAct{width:70px;height:70px;left:50%;margin-left:-35px;bottom:24%;display:none;border-color:#e9c46a}
 #tPause{width:40px;height:40px;right:12px;top:auto;bottom:auto;top:52px;border-radius:6px}
 #tSprint{width:50px;height:50px;left:22px;bottom:180px}
-body.touch #ammo{bottom:auto;top:6px;right:62px}
+body.touch #ammo{bottom:auto;top:6px;right:108px}
 body.touch #ammo #mag{font-size:26px}body.touch #wname{font-size:11px}
 body.touch #mini{width:92px;height:92px;top:8px;left:8px}
 body.touch #obj{top:106px;left:10px;font-size:12px;max-width:38vw}
@@ -191,7 +193,7 @@ body.touch #tPause{top:8px;right:10px}
 <body>
 <canvas id="c"></canvas>
 <canvas id="grain" width="320" height="180"></canvas>
-<div id="vig"></div><div id="blood"></div><div id="flashW"></div>
+<div id="vig"></div><div id="dirt"></div><div id="blood"></div><div id="flashW"></div>
 <div class="lb" id="lbT"></div><div class="lb" id="lbB"></div>
 <div id="subs"></div>
 <div id="title"></div>
@@ -232,6 +234,7 @@ body.touch #tPause{top:8px;right:10px}
   <div class="tb" id="tAct">HOLD</div>
   <div class="tb" id="tPause">II</div>
   <div class="tb" id="tPick">PICK UP</div>
+  <div class="tb" id="tCam">CAM</div>
 </div>
 
 <div class="scr" id="loading"><div style="letter-spacing:6px;font-size:20px">LOADING</div><div class="bar"><i id="lbar"></i></div></div>
@@ -291,7 +294,7 @@ body.touch #tPause{top:8px;right:10px}
     <div><kbd>R</kbd>Reload</div><div><kbd>G</kbd>Frag grenade</div>
     <div><kbd>V</kbd>Knife melee</div><div><kbd>E</kbd>Interact / plant</div>
     <div><kbd>1 2 3</kbd>Weapons</div><div><kbd>Wheel</kbd>Swap weapon</div>
-    <div><kbd>Esc</kbd>Pause</div><div><kbd>Enter</kbd>Skip cinematic</div>
+    <div><kbd>B</kbd>Toggle cinematic camera</div><div><kbd>F</kbd>Pick up weapon</div><div><kbd>Esc</kbd>Pause</div><div><kbd>Enter</kbd>Skip cinematic</div>
   </div>
   <p style="font-size:13px;color:#999;margin-top:10px">Touch: left side = move stick (push to the top edge to sprint), right side = look, drag on FIRE to aim while shooting.</p>
   <div class="btns"><button class="btn" data-a="cback">Back</button></div>
