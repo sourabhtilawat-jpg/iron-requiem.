@@ -24,6 +24,7 @@
   },
   "devDependencies": {
     "@capacitor/cli": "^6.1.2",
+    "@gltf-transform/cli": "^4.5.1",
     "electron": "^31.0.0",
     "electron-builder": "^24.13.3",
     "vite": "^5.4.0"
@@ -31,9 +32,23 @@
   "build": {
     "appId": "com.ironrequiem.game",
     "productName": "Iron Requiem",
-    "files": ["dist/**/*", "electron/**/*", "package.json"],
-    "directories": { "output": "release" },
-    "win": { "target": ["nsis", "portable"] },
-    "nsis": { "oneClick": false, "allowToChangeInstallationDirectory": true }
+    "files": [
+      "dist/**/*",
+      "electron/**/*",
+      "package.json"
+    ],
+    "directories": {
+      "output": "release"
+    },
+    "win": {
+      "target": [
+        "nsis",
+        "portable"
+      ]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true
+    }
   }
 }
