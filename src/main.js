@@ -436,7 +436,7 @@ function vmFromModel(w,src){const g=new THREE.Group();const m=src.clone(true);m.
   else{add(bx(.045,.04,.075,S1),sup.x,sup.y-.035,sup.z);const ls=add(bx(.062,.062,.32,S2),sup.x-.05,sup.y-.085,sup.z+.15);ls.rotation.set(.22,-.35,0);}
   if(w.scoped&&sr&&sf){const len=w.att.optic==='scope4'?.3:.2;const c=new THREE.Mesh(new THREE.CylinderGeometry(.019,.019,len,12),VMMATS.blued);c.rotation.x=Math.PI/2;c.renderOrder=10;add(c,0,Math.max(sr.y,sf.y)+.035,(sr.z+sf.z)/2+.08);}
   const mz=new THREE.Object3D();mz.position.copy(muzP);g.add(mz);g.userData.muz=mz;
-  const sy=sr&&sf?(sr.y+(w.scoped?.035:0)*0+(sf.y-sr.y)*.5):.05;w.aim=[0,-(w.scoped?Math.max(sr.y,sf.y)+.035:sy),pistol?-.32:-.3];return g;}
+  const sy=sr&&sf?(sr.y+(w.scoped?.035:0)*0+(sf.y-sr.y)*.5):.05;w.aim=[sr&&sf&&!w.scoped?-(sr.x+sf.x)/2:0,-(w.scoped?Math.max(sr.y,sf.y)+.035:sy),pistol?-.32:-.3];return g;}
 function equip(slot,wid,att,full=true){const w=effStats(wid,att);pl.wdef[slot]=w;if(pl.vm[slot])VM.remove(pl.vm[slot]);const g=WMODELS[wid]?vmFromModel(w,WMODELS[wid]):buildGunVM(w,VMMATS);
   if(!WMODELS[wid])loadWeapon(wid).then(()=>{if(WMODELS[wid]&&pl.wdef[slot]&&pl.wdef[slot].id===wid){const ws=pl.ws[slot];equip(slot,wid,att,true);pl.ws[slot]=ws;}});
   if(wid==='mg42'&&PROPS.mg42&&!WMODELS[wid]){g.children.forEach(c=>{if(c.isMesh&&c.material!==VMMATS.skin&&c.material!==VMMATS.sleeve)c.visible=false;});const mm=PROPS.mg42.clone(true);mm.scale.setScalar(.72);mm.position.set(0,-.005,-.56);mm.traverse(o=>{if(o.isMesh){o.material=o.material.clone();o.material.fog=false;o.castShadow=false;o.renderOrder=10;}});g.add(mm);g.userData.muz.position.set(0,.02,-.56-(PROPS.mg42.userData.len||1.2)*.36);}g.visible=slot===pl.cur;VM.add(g);pl.vm[slot]=g;pl.ws[slot]={mag:w.mag,res:full?w.res:w.mag*3};}
@@ -527,7 +527,7 @@ function killEnemy(e,head,melee,nade){
   if(e.counts&&mission.phase==='trench')mission.kills++;
   if(e.type==='mg'&&!mission.bunkerDown)setTimeout(()=>{if(!mission.bunkerDown&&state!=='menu')spawnEnemy(BK.x,BK.z+1.6,'mg');},12000);
 }
-function die(){pl.alive=false;pl.deaths++;state='dead';exitLock();document.body.classList.remove('play');
+function die(){if(pModel&&TP){let t=0;const f=()=>{t+=.06;pModel.rig.rotation.x=-Math.PI/2*ease(Math.min(1,t));pModel.rig.position.y=0;if(t<1)setTimeout(f,16);};f();}pl.alive=false;pl.deaths++;state='dead';exitLock();document.body.classList.remove('play');
   const q=["The beach doesn't care how brave you are. Keep your head down.","Cover is life. Hedgehogs, the tank, the seawall — use them.","Crouched and prone soldiers are much harder to hit.","Grenades clear trenches faster than rifles ever will.","Heads down, keep moving. Standing still in the open gets you killed."];
   $('deadq').textContent=q[Math.floor(Math.random()*q.length)];setTimeout(()=>show('dead'),900);}
 
@@ -594,7 +594,7 @@ function updNades(dt){for(let i=nades.length-1;i>=0;i--){const n=nades[i];n.fuse
 
 /* ================= MISSION ================= */
 const artQ=[];const mission={phase:'none',kills:0,need:0,cp:null,bunkerDown:false,timer:0,art:3};
-function clearDynamic(){mixers.length=0;for(const e of enemies)scene.remove(e.g);enemies.length=0;for(const a of allies)scene.remove(a.g);allies.length=0;for(const n of nades)scene.remove(n.m);nades.length=0;rebuildHit();}
+function clearDynamic(){mixers.length=0;if(pModel&&pModel.mixer)mixers.push(pModel.mixer);for(const e of enemies)scene.remove(e.g);enemies.length=0;for(const a of allies)scene.remove(a.g);allies.length=0;for(const n of nades)scene.remove(n.m);nades.length=0;rebuildHit();}
 function resetPlayer(pos,yaw){pl.pos.copy(pos);pl.pos.y=H(pos.x,pos.z);pl.vel.set(0,0,0);pl.yaw=yaw;pl.pitch=0;pl.hp=100;pl.alive=true;pl.stance=0;pl.eye=1.65;pl.ads=0;pl.adsOn=false;pl.reload=0;pl.switchT=0;pl.plant=0;
   pl.cur=0;equip(0,LOADOUT.primary,LOADOUT.att[LOADOUT.primary]);equip(1,LOADOUT.secondary,LOADOUT.att[LOADOUT.secondary]);pl.nades=4;}
 function setupMission(){clearDynamic();
@@ -653,7 +653,7 @@ function restartCP(){hideAll();const cp=mission.cp;resetPlayer(cp.pos,cp.yaw);pl
 
 /* ================= CINEMATICS ================= */
 let cine=null;
-function playCine(shots,done){cine={shots,i:0,t:0,done,fired:{}};state='cine';exitLock();document.body.classList.add('cine');document.body.classList.remove('play');musicDuck=1;applyVolumes();VM.visible=false;subQ=[];subT=0;$('subs').innerHTML='';if(shots[0].start)shots[0].start();}
+function playCine(shots,done){if(pModel)pModel.g.visible=false;cine={shots,i:0,t:0,done,fired:{}};state='cine';exitLock();document.body.classList.add('cine');document.body.classList.remove('play');musicDuck=1;applyVolumes();VM.visible=false;subQ=[];subT=0;$('subs').innerHTML='';if(shots[0].start)shots[0].start();}
 function endCine(skip){if(!cine)return;const d=cine.done;const sh=cine.shots;if(skip){for(let i=cine.i;i<sh.length;i++){if(i>cine.i&&sh[i].start)sh[i].start();if(sh[i].end)sh[i].end();}}cine=null;document.body.classList.remove('cine');$('title').style.opacity=0;subQ=[];subT=0;$('subs').innerHTML='';VM.visible=true;d&&d();}
 function updCine(dt){const sh=cine.shots[cine.i];cine.t+=dt;const k=clamp(cine.t/sh.dur,0,1);
   if(sh.cam){const r=sh.cam(k,cine.t);camera.position.copy(r.p);camera.lookAt(r.l);}
@@ -786,7 +786,7 @@ function updPlayer(dt){
   pl.fireCool-=dt;pl.kick=Math.max(0,pl.kick-dt*9);if(pl.melee>0)pl.melee-=dt;
   if(pl.reload>0){pl.reload-=dt;if(pl.reload<=0)finishReload();}
   if(pl.switchT>0){const prev=pl.switchT;pl.switchT-=dt;if(prev>.22&&pl.switchT<=.22){pl.cur=pl.next;pl.vm.forEach((v,i)=>v.visible=i===pl.cur);}}
-  const w=pl.wdef[pl.cur];if(firing&&(w.auto||pl.trig)){fire();}pl.trig=false;
+  const w=pl.wdef[pl.cur];if((firing&&w.auto)||pl.trig){if(pl.fireCool<=0||!pl.trig)fire();if(pl.fireCool>0&&pl.trig&&!firing){pl.trigQ=.25;}}if(pl.trigQ>0){pl.trigQ-=dt;if(pl.fireCool<=0){fire();pl.trigQ=0;}}pl.trig=false;
   if(time-pl.lastHurt>4&&pl.hp<100)pl.hp=Math.min(100,pl.hp+28*dt);
   muzzleLight.intensity*=Math.exp(-dt*35);
   {const sc=cw.scoped&&pl.ads>.85;TP=S.camMode==='cinematic'&&!(cw.scoped&&pl.ads>.5)&&!!ensurePlayerModel();if(pModel){pModel.g.visible=TP;if(TP)updPlayerModel(dt,Math.hypot(pl.vel.x,pl.vel.z));}$('scope').style.display=sc?'block':'none';VM.visible=!sc&&!TP;if(sc&&pl.stance!==2){pl.yaw+=Math.sin(time*1.3)*.00035;pl.pitch+=Math.cos(time*1.7)*.00025;}}
@@ -861,7 +861,7 @@ function deploy(){briefTok++;show('loading');$('lbar').style.width='0';setTimeou
 function enterPlay(){hideAll();state='play';document.body.classList.add('play');document.body.classList.remove('cine');musicDuck=.3;applyVolumes();VM.visible=true;camera.fov=S.fov;camera.updateProjectionMatrix();if(!isTouch)reqLock();}
 function pauseGame(){if(state!=='play')return;state='pause';exitLock();document.body.classList.remove('play');show('pause');mouseL=mouseR=false;tState.fire=false;}
 function resume(){hideAll();state='play';document.body.classList.add('play');if(!isTouch)reqLock();}
-function toMenu(){exitLock();state='menu';cine=null;document.body.classList.remove('play','cine');clearDynamic();musicDuck=1;applyVolumes();$('timer').style.display='none';$('prompt').style.display='none';$('subs').innerHTML='';subQ=[];show('menu');VM.visible=false;camera.fov=55;camera.updateProjectionMatrix();
+function toMenu(){if(pModel)pModel.g.visible=false;exitLock();state='menu';cine=null;document.body.classList.remove('play','cine');clearDynamic();musicDuck=1;applyVolumes();$('timer').style.display='none';$('prompt').style.display='none';$('subs').innerHTML='';subQ=[];show('menu');VM.visible=false;camera.fov=55;camera.updateProjectionMatrix();
   myBoat.position.set(0,0,62);myBoat.rotation.set(0,0,0);myBoat.userData.ramp.rotation.x=0;if(myBoat.userData.dummies){myBoat.userData.dummies.forEach(d=>myBoat.remove(d));myBoat.userData.dummies=null;}}
 document.addEventListener('click',e=>{audioInit();const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;SND.ui();
   if(a==='campaign')show('missions');else if(a==='settings'){settingsFrom='menu';openSettings();}else if(a==='controls')show('controls');
@@ -942,4 +942,4 @@ function loop(now){requestAnimationFrame(loop);let dt=Math.min(.05,(now-last)/10
   if(VM.visible&&state==='play'){renderer.clearDepth();vmCam.fov=lerp(52,40,pl.ads);vmCam.updateProjectionMatrix();renderer.render(vmScene,vmCam);}}
 applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
 Promise.all([loadProps(),loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';})]).then(()=>setTimeout(()=>show('menu'),300));
-window.__game={spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
+window.__game={WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
