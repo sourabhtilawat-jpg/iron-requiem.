@@ -244,6 +244,15 @@ async function loadCharacters(onProg){const L=new GLTFLoader();const list=[['us'
   for(const [k,f] of list){try{const g=await L.loadAsync(BASE+f);const b=new THREE.Box3().setFromObject(g.scene);const h=b.max.y-b.min.y;const sc=1.78/(h||1.78);
       g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;o.frustumCulled=false;}});CHAR[k]={scene:g.scene,anims:g.animations,scale:sc,minY:b.min.y};}catch(e){}
     onProg&&onProg(++n/list.length);}}
+// ---- prop models (GLB) ----
+async function loadProps(){const L=new GLTFLoader();
+  try{const g=await L.loadAsync(BASE+'models/landing_craft.glb');g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material)o.material.envMapIntensity=.5;}});upgradeBoats(g.scene);}catch(e){console.warn('landing craft model missing',e);}}
+function upgradeBoats(src){for(const b of boats){const keepRot=b.userData.ramp.rotation.x;
+  for(const c of [...b.children])if(!(b.userData.dummies||[]).includes(c))b.remove(c);
+  const m=src.clone(true);const wrap=new THREE.Group();m.position.set(0,0,-5.33);wrap.add(m);wrap.rotation.y=Math.PI;b.add(wrap);
+  const ramp=m.getObjectByName('Ramp'),hinge=m.getObjectByName('RampHinges');const base=ramp.rotation.x;let v=0;
+  const set=x=>{v=x;ramp.rotation.x=base-x;if(hinge)hinge.rotation.x=base-x;};
+  b.userData.ramp={rotation:{get x(){return v;},set x(x){set(x);}}};set(keepRot);}}
 function clipBy(anims,re){return anims.find(a=>re.test(a.name));}
 function makeSoldierGLB(team){const C=CHAR[team];const g=new THREE.Group(),rig=new THREE.Group();g.add(rig);
   const m=SkeletonUtils.clone(C.scene);m.scale.setScalar(C.scale);m.position.y=-C.minY*C.scale;rig.add(m);
@@ -777,5 +786,5 @@ function loop(now){requestAnimationFrame(loop);let dt=Math.min(.05,(now-last)/10
   updLoadoutPreview(dt);updGrain(dt);if(water2)water2.material.uniforms.time.value+=dt*.6;
   if(composer){composer.render();}else{renderer.clear();renderer.render(scene,camera);}if(VM.visible&&state==='play'){renderer.clearDepth();vmCam.fov=lerp(52,40,pl.ads);vmCam.updateProjectionMatrix();renderer.render(vmScene,vmCam);}}
 applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
-loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';}).then(()=>setTimeout(()=>show('menu'),300));
+Promise.all([loadProps(),loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';})]).then(()=>setTimeout(()=>show('menu'),300));
 window.__game={VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
