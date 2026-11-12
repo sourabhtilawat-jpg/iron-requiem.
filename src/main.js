@@ -142,7 +142,9 @@ const MAT={
 function box(w,h,d,m){const o=new THREE.Mesh(new THREE.BoxGeometry(w,h,d),m);o.castShadow=true;o.receiveShadow=true;return o;}
 
 /* ================= TERRAIN ================= */
-function H(x,z){
+let HF=null;function H(x,z){return HF?HF(x,z):beachH(x,z);}
+function groundAt(x,z){let g=H(x,z);for(const c of colliders){if(x>c.minx&&x<c.maxx&&z>c.minz&&z<c.maxz&&c.maxy-c.miny<1.05&&c.maxy>g&&c.maxy-g<9)g=c.maxy;}return g;}
+function beachH(x,z){
   let h;
   if(z>40)h=-(z-40)*.12;else h=(40-z)*.025;
   if(z<-20){const t=Math.min(1,(-20-z)/22);const s=t*t*(3-2*t);h=1.5+s*8;}
@@ -260,15 +262,15 @@ async function loadCharacters(onProg){const L=new GLTFLoader();
     onProg&&onProg(++n/list.length);}));
   for(const k in CHAR)CHAR[k].sort((a,b)=>a.file<b.file?-1:1);}
 // ---- prop models (GLB) ----
-async function loadProps(){const L=new GLTFLoader();await Promise.all([(async()=>{try{const g=await L.loadAsync(BASE+'models/landing_craft.glb');g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material)o.material.envMapIntensity=.5;}});upgradeBoats(g.scene);}catch(e){console.warn('landing craft model missing',e);}})(),(async()=>{try{const g=await L.loadAsync(BASE+'models/sherman_destroyed.glb');g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material)o.material.envMapIntensity=.3;}});upgradeTank(g.scene);}catch(e){}})(),
+async function loadProps(){const L=new GLTFLoader();await Promise.all([(async()=>{try{const g=await L.loadAsync(BASE+'models/landing_craft.glb');g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material)o.material.envMapIntensity=.5;}});upgradeBoats(g.scene);}catch(e){console.warn('landing craft model missing',e);}})(),(async()=>{try{const g=await L.loadAsync(BASE+'models/sherman_destroyed.glb');g.scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=true;if(o.material)o.material.envMapIntensity=.3;}});PROPS.sherman=g.scene;upgradeTank(g.scene);}catch(e){}})(),
   ...[...new Set(['garand','thompson','kar98k','mp40','stg44','g43','mg42',LOADOUT.primary,LOADOUT.secondary])].map(id=>loadWeapon(id)),
   (async()=>{try{const g=await L.loadAsync(BASE+'models/fp_arms_us.glb');setupArms(g.scene);}catch(e){console.warn('arms',e);}})(),
-  (async()=>{try{const g=await L.loadAsync(BASE+'models/czech_hedgehog.glb');shadowAll(g.scene);for(const h of HEDGES){h.children.forEach(c=>c.visible=false);const m=g.scene.clone(true);m.position.y=-.75;h.add(m);}}catch(e){}})(),
-  (async()=>{try{const g=await L.loadAsync(BASE+'models/sandbag_wall.glb');shadowAll(g.scene);for(const sb of SBAGS){sb.m.visible=false;const n=Math.max(1,Math.round(sb.len/3.5));const sx=sb.len/(n*3.51);for(let i=0;i<n;i++){const m=g.scene.clone(true);m.scale.set(sx,sb.h/.83,1.6);m.position.set(sb.m.position.x-sb.len/2+(i+.5)*sb.len/n,sb.m.position.y-sb.h/2,sb.m.position.z);m.rotation.y=sb.m.rotation.y;scene.add(m);}}}catch(e){}})(),
-  (async()=>{try{const g=await L.loadAsync(BASE+'models/concrete_bunker.glb');shadowAll(g.scene);let cm=null;g.scene.traverse(o=>{if(!cm&&o.isMesh&&o.material&&o.material.map)cm=o.material;});
+  (async()=>{try{const g=await L.loadAsync(BASE+'models/czech_hedgehog.glb');shadowAll(g.scene);PROPS.hedgehog=g.scene;for(const h of HEDGES){h.children.forEach(c=>c.visible=false);const m=g.scene.clone(true);m.position.y=-.75;h.add(m);}}catch(e){}})(),
+  (async()=>{try{const g=await L.loadAsync(BASE+'models/sandbag_wall.glb');shadowAll(g.scene);PROPS.sandbag=g.scene;for(const sb of SBAGS){sb.m.visible=false;const n=Math.max(1,Math.round(sb.len/3.5));const sx=sb.len/(n*3.51);for(let i=0;i<n;i++){const m=g.scene.clone(true);m.scale.set(sx,sb.h/.83,1.6);m.position.set(sb.m.position.x-sb.len/2+(i+.5)*sb.len/n,sb.m.position.y-sb.h/2,sb.m.position.z);m.rotation.y=sb.m.rotation.y;scene.add(m);}}}catch(e){}})(),
+  (async()=>{try{const g=await L.loadAsync(BASE+'models/concrete_bunker.glb');shadowAll(g.scene);PROPS.bunker=g.scene;let cm=null;g.scene.traverse(o=>{if(!cm&&o.isMesh&&o.material&&o.material.map)cm=o.material;});
      if(cm){for(const k of ['map','normalMap','roughnessMap']){if(cm[k]){const t=cm[k].clone();t.wrapS=t.wrapT=THREE.RepeatWrapping;t.repeat.set(2.5,1);t.needsUpdate=true;MAT.concrete[k]=t;}}MAT.concrete.color.setHex(0xffffff);MAT.concrete.needsUpdate=true;}
      for(const [x,z,ry] of [[-40,-57,.3],[46,-58,-.4],[-75,-60,0]]){const m=g.scene.clone(true);m.position.set(x,H(x,z)-.1,z);m.rotation.y=ry;scene.add(m);m.updateMatrixWorld(true);const b=new THREE.Box3().setFromObject(m);colliders.push({minx:b.min.x,maxx:b.max.x,minz:b.min.z,maxz:b.max.z,miny:b.min.y,maxy:b.max.y});m.traverse(o=>{if(o.isMesh)statics.push(o);});}rebuildHit();}catch(e){}})(),
-  (async()=>{try{const g=await L.loadAsync(BASE+'models/barbed_wire.glb');shadowAll(g.scene);const spots=[[-30,-6,.1],[-12,-4,-.05],[10,-5,.08],[28,-7,0],[-40,4,.2],[36,6,-.15],[-24,-41,0],[-6,-41,0],[18,-40.5,.05],[34,-41,0]];
+  (async()=>{try{const g=await L.loadAsync(BASE+'models/barbed_wire.glb');shadowAll(g.scene);PROPS.wire=g.scene;const spots=[[-30,-6,.1],[-12,-4,-.05],[10,-5,.08],[28,-7,0],[-40,4,.2],[36,6,-.15],[-24,-41,0],[-6,-41,0],[18,-40.5,.05],[34,-41,0]];
      const n=QUAL[S.quality].grass?spots.length:4;for(let i=0;i<n;i++){const [x,z,ry]=spots[i];const m=g.scene.clone(true);m.position.set(x,H(x,z),z);m.rotation.y=ry;scene.add(m);}}catch(e){}})()
   ]);}
 const WMODELS={},WLOAD={};
@@ -525,16 +527,16 @@ function killEnemy(e,head,melee,nade){
   let pts=100;let tag='';if(head){pts+=50;tag=' <em>(headshot)</em>';if(S.slowmo&&Math.random()<.5)slowT=.45;}if(melee){pts+=50;tag=' <em>(knife)</em>';}if(nade)tag=' <em>(grenade)</em>';stats.score+=pts;
   xp(`+${pts}${head?' HEADSHOT':melee?' MELEE':''}`);feed(`<b>Kane</b> ▸ ${e.type==='mg'?'MG42 Gunner':'Rifleman'}${tag}`);
   if(e.counts&&mission.phase==='trench')mission.kills++;
-  if(e.type==='mg'&&!mission.bunkerDown)setTimeout(()=>{if(!mission.bunkerDown&&state!=='menu')spawnEnemy(BK.x,BK.z+1.6,'mg');},12000);
+  if(CUR===1&&e.type==='mg'&&!mission.bunkerDown)setTimeout(()=>{if(!mission.bunkerDown&&state!=='menu')spawnEnemy(BK.x,BK.z+1.6,'mg');},12000);
 }
-function die(){if(pModel&&TP){let t=0;const f=()=>{t+=.06;pModel.rig.rotation.x=-Math.PI/2*ease(Math.min(1,t));pModel.rig.position.y=0;if(t<1)setTimeout(f,16);};f();}pl.alive=false;pl.deaths++;state='dead';exitLock();document.body.classList.remove('play');
+function die(){$('dead').querySelector('h1').textContent='K.I.A.';if(pModel&&TP){let t=0;const f=()=>{t+=.06;pModel.rig.rotation.x=-Math.PI/2*ease(Math.min(1,t));pModel.rig.position.y=0;if(t<1)setTimeout(f,16);};f();}pl.alive=false;pl.deaths++;state='dead';exitLock();document.body.classList.remove('play');
   const q=["The beach doesn't care how brave you are. Keep your head down.","Cover is life. Hedgehogs, the tank, the seawall — use them.","Crouched and prone soldiers are much harder to hit.","Grenades clear trenches faster than rifles ever will.","Heads down, keep moving. Standing still in the open gets you killed."];
   $('deadq').textContent=q[Math.floor(Math.random()*q.length)];setTimeout(()=>show('dead'),900);}
 
 /* ================= ENEMIES / ALLIES ================= */
 function spawnEnemy(x,z,type='rifle',o={}){
-  const s=makeSoldier('axis',type==='mg'?0:undefined);s.g.position.set(x,H(x,z),z);scene.add(s.g);
-  const e={s,g:s.g,pos:s.g.position,type,hp:(type==='mg'?110:100)*DIFF[S.difficulty].hp,alive:true,cool:rnd(1.5,4),stand:0,crouch:o.trench?1:0,trench:!!o.trench,counts:o.counts!==false,target:o.target||null,wid:type==='mg'?'mg42':(()=>{const r=Math.random();return r<.55?'kar98k':r<.8?'mp40':r<.93?'stg44':'g43';})(),lastFire:-9,gren:rnd(8,18),burst:0,burstOn:true,deathT:0,looted:false,run:0};
+  const s=makeSoldier('axis',type==='mg'?0:undefined);s.g.position.set(x,groundAt(x,z),z);scene.add(s.g);
+  const e={s,g:s.g,pos:s.g.position,type,group:o.group,boss:o.boss,name:o.name,hp:(o.hp||(type==='mg'?110:100))*DIFF[S.difficulty].hp,alive:true,cool:rnd(1.5,4),stand:0,crouch:o.trench?1:0,trench:!!o.trench,counts:o.counts!==false,target:o.target||null,wid:o.wid||type==='mg'?(o.wid||'mg42'):(()=>{const r=Math.random();return r<.55?'kar98k':r<.8?'mp40':r<.93?'stg44':'g43';})(),lastFire:-9,gren:rnd(8,18),burst:0,burstOn:true,deathT:0,looted:false,run:0};
   if(type==='mg'){e.s.rifle=null;}
   if(s.glb)setSoldierGun(s,e.wid);s.hit.forEach(m=>m.userData.enemy=e);enemies.push(e);rebuildHit();return e;}
 function spawnAlly(x,z,tx,tz,delay=0,doomed=false){const s=makeSoldier('us');if(s.glb)setSoldierGun(s,Math.random()<.65?'garand':'thompson');s.g.position.set(x,Math.max(H(x,z),-.3),z);scene.add(s.g);const a={s,g:s.g,pos:s.g.position,target:new V3(tx,0,tz),delay,doomed,alive:true,deathT:0,cool:rnd(1,3),run:0,crouch:0};allies.push(a);return a;}
@@ -551,7 +553,7 @@ function updEnemies(dt){nearDrop=null;nearDropD=9;
       if(state==='play'&&e.wid&&!pl.wdef.some(w=>w.id===e.wid)){const dd=e.pos.distanceTo(pl.pos);if(dd<2.4&&dd<nearDropD){nearDrop=e;nearDropD=dd;}}
       if(!e.looted&&state==='play'&&e.pos.distanceTo(pl.pos)<1.8){e.looted=true;const w=pl.wdef[pl.cur];pl.ws[pl.cur].res=Math.min(pl.ws[pl.cur].res+w.mag*2,w.res*1.5|0);xp('+AMMO');SND.click();}continue;}
     const dx=pl.pos.x-e.pos.x,dz=pl.pos.z-e.pos.z,dist=Math.hypot(dx,dz);
-    if(e.target){_v.set(e.target.x-e.pos.x,0,e.target.z-e.pos.z);const L=_v.length();if(L<.6){e.target=null;e.crouch=1;e.trench=true;}else{_v.normalize();e.pos.x+=_v.x*3.6*dt;e.pos.z+=_v.z*3.6*dt;e.pos.y=H(e.pos.x,e.pos.z);e.g.rotation.y=Math.atan2(_v.x,_v.z);animRun(e.s,1,dt,3.6);continue;}}
+    if(e.target){_v.set(e.target.x-e.pos.x,0,e.target.z-e.pos.z);const L=_v.length();if(L<.6){e.target=null;e.crouch=1;e.trench=true;}else{_v.normalize();e.pos.x+=_v.x*3.6*dt;e.pos.z+=_v.z*3.6*dt;e.pos.y=groundAt(e.pos.x,e.pos.z);e.g.rotation.y=Math.atan2(_v.x,_v.z);animRun(e.s,1,dt,3.6);continue;}}
     animRun(e.s,0,dt,0);if(e.flinch>0){e.flinch=Math.max(0,e.flinch-dt*5);e.s.rig.rotation.x=-Math.sin(e.flinch*Math.PI)*.22;e.s.rig.rotation.z=Math.sin(e.flinch*Math.PI)*.08;}
     const fy=Math.atan2(dx,dz);e.g.rotation.y+=((fy-e.g.rotation.y+Math.PI*3)%(Math.PI*2)-Math.PI)*Math.min(1,dt*4);
     const range=e.type==='mg'?150:88;e.cool-=dt;
@@ -579,7 +581,7 @@ function updEnemies(dt){nearDrop=null;nearDropD=9;
 function updAllies(dt){for(const a of allies){
   if(!a.alive){if(a.deathT<1){a.deathT+=dt*2;a.s.rig.rotation.x=-Math.PI/2*ease(Math.min(1,a.deathT));}continue;}
   if(a.delay>0){a.delay-=dt;continue;}
-  if(a.target){_v.set(a.target.x-a.pos.x,0,a.target.z-a.pos.z);const L=_v.length();if(L<.6){a.target=null;a.crouch=1;}else{_v.normalize();const sp=a.pos.z>39?3:4.6;a.pos.x+=_v.x*sp*dt;a.pos.z+=_v.z*sp*dt;a.pos.y=Math.max(H(a.pos.x,a.pos.z),-.35);a.g.rotation.y=Math.atan2(_v.x,_v.z);animRun(a.s,1,dt,sp);a.s.rig.position.y=0;
+  if(a.target){_v.set(a.target.x-a.pos.x,0,a.target.z-a.pos.z);const L=_v.length();if(L<.6){a.target=null;a.crouch=1;}else{_v.normalize();const sp=a.pos.z>39?3:4.6;a.pos.x+=_v.x*sp*dt;a.pos.z+=_v.z*sp*dt;a.pos.y=Math.max(groundAt(a.pos.x,a.pos.z),-.35);a.g.rotation.y=Math.atan2(_v.x,_v.z);animRun(a.s,1,dt,sp);a.s.rig.position.y=0;
     if(a.doomed&&a.pos.z<a.doomed){a.alive=false;explode(a.pos.clone(),false,null);}continue;}}
   animRun(a.s,0,dt,0);a.s.rig.position.y=lerp(a.s.rig.position.y,-a.crouch*(a.s.proc?.38:.65),dt*5);
   a.cool-=dt;const tg=enemies.find(e=>e.alive&&e.pos.distanceTo(a.pos)<90);
@@ -619,8 +621,8 @@ function startGameplay(){
   say('LT. HAYES (radio)','Kane! Get your men across the sand — the seawall, now!',3.5);say('SGT. MILLER','Use the hedgehogs for cover! Move, move!',3);
   enterPlay();
 }
-function objTarget(){if(mission.phase==='beach')return new V3(0,H(0,-12.5)+1,-12.5);if(mission.phase==='trench'){const e=enemies.find(e=>e.alive&&e.counts);return e?e.pos.clone().add(new V3(0,2,0)):new V3(0,10,-46);}if(mission.phase==='bunker')return new V3(BK.x,H(BK.x,BK.z-4.2)+1.2,BK.z-4.2);if(mission.phase==='clear')return null;return null;}
-function updMission(dt){
+function objTarget(){if(CUR!==1)return lvTarget();if(mission.phase==='beach')return new V3(0,H(0,-12.5)+1,-12.5);if(mission.phase==='trench'){const e=enemies.find(e=>e.alive&&e.counts);return e?e.pos.clone().add(new V3(0,2,0)):new V3(0,10,-46);}if(mission.phase==='bunker')return new V3(BK.x,H(BK.x,BK.z-4.2)+1.2,BK.z-4.2);if(mission.phase==='clear')return null;return null;}
+function updMission(dt){if(CUR!==1){if(LV)updLevel(dt);return;}
   // artillery
   mission.art-=dt;if(mission.art<=0&&mission.phase!=='end'){mission.art=mission.phase==='beach'||mission.phase==='intro'?rnd(1.8,4):rnd(5,9);let p;for(let k=0;k<8;k++){p=new V3(rnd(-55,55),0,rnd(-8,70));if(p.distanceTo(pl.pos)>11)break;}p.y=Math.max(H(p.x,p.z),0);artQ.push({p,t:1.1,big:Math.random()<.4});SND.whistle(p.distanceTo(pl.pos));}
   for(let i=artQ.length-1;i>=0;i--){const a=artQ[i];a.t-=dt;if(a.t<=0){explode(a.p,a.big,null);artQ.splice(i,1);}}
@@ -644,10 +646,10 @@ function updMission(dt){
       if(pl.alive){stats.score+=500;xp('+500 BUNKER DESTROYED');addEmitter(bp.clone().add(new V3(0,2,0)),'bsmoke',.2);addEmitter(bp.clone().add(new V3(0,1,0)),'fire',.06);
         setTimeout(()=>{if(state==='play')playCine(endCineShots(),missionComplete);},1800);}}}
 }
-function missionComplete(){state='complete';document.body.classList.remove('play','cine');exitLock();
+function missionComplete(){PROGRESS.done[CUR]=1;saveProgress();renderMissions();const nx=LEVELS[CUR+1];$('nextTxt').innerHTML=nx?`NEXT: Mission ${CUR+1} — ${nx.title}`:'Campaign complete';$('nextBtn').style.display=nx?'':'none';state='complete';document.body.classList.remove('play','cine');exitLock();
   const t=Math.round((stats.endT||time)-stats.start);const acc=stats.shots?Math.round(stats.hits/stats.shots*100):0;const sc=stats.score+acc*10;
   $('stats').innerHTML=`<span>Time</span><span>${Math.floor(t/60)}:${String(t%60).padStart(2,'0')}</span><span>Enemies killed</span><span>${stats.kills}</span><span>Headshots</span><span>${stats.heads}</span><span>Accuracy</span><span>${acc}%</span><span>Deaths</span><span>${pl.deaths}</span><span>Difficulty</span><span>${S.difficulty.toUpperCase()}</span><span><b>SCORE</b></span><span><b>${sc}</b></span>`;show('complete');}
-function restartCP(){hideAll();const cp=mission.cp;resetPlayer(cp.pos,cp.yaw);pl.alive=true;
+function restartCP(){$('dead').querySelector('h1').textContent='K.I.A.';if(CUR!==1){levelRestart();return;}hideAll();const cp=mission.cp;resetPlayer(cp.pos,cp.yaw);pl.alive=true;
   if(cp.phase==='bunker'){mission.phase='bunker';setObj('Plant a charge on the <b>MG42 bunker</b>');}else if(cp.phase==='trench'){mission.phase='trench';}else{mission.phase='beach';setObj('Get off the beach — reach the <b>seawall</b>');}
   for(const n of nades)scene.remove(n.m);nades.length=0;enterPlay();}
 
@@ -778,7 +780,7 @@ function updPlayer(dt){
     if(m===o1)pl.pos.x-=o1;else if(m===o2)pl.pos.x+=o2;else if(m===o3)pl.pos.z-=o3;else pl.pos.z+=o4;}}
   for(const e of enemies){if(!e.alive)continue;const dx=pl.pos.x-e.pos.x,dz=pl.pos.z-e.pos.z,d=Math.hypot(dx,dz);if(d<.7&&d>0){pl.pos.x+=dx/d*(.7-d);pl.pos.z+=dz/d*(.7-d);}}
   if(pl.pos.y<=ground){if(!pl.onG&&pl.vel.y<-4){pl.land=1;SND.step(false);SND.step(false);}pl.pos.y=ground;pl.vel.y=0;pl.onG=true;}else if(pl.pos.y-ground>.3)pl.onG=false;else if(pl.vel.y<=0){pl.pos.y=ground;pl.vel.y=0;pl.onG=true;}
-  pl.pos.x=clamp(pl.pos.x,-75,75);pl.pos.z=clamp(pl.pos.z,-82,42);
+  if(CUR===1){pl.pos.x=clamp(pl.pos.x,-75,75);pl.pos.z=clamp(pl.pos.z,-82,42);}else{pl.pos.x=clamp(pl.pos.x,-135,135);pl.pos.z=clamp(pl.pos.z,-135,135);}
   const hs=Math.hypot(pl.vel.x,pl.vel.z);if(pl.pos.z>39.5&&hs>1&&Math.random()<dt*8)emit('splash',pl.pos.clone().add(new V3(0,.1,0)),1);
   pl.eye=lerp(pl.eye,[1.65,1.05,.45][pl.stance],Math.min(1,dt*10));
   pl.pitch=clamp(pl.pitch,-1.45,1.45);
@@ -833,7 +835,7 @@ function updHUD(dt){
   // minimap
   const m=mctx,R=75,sc=1.4;m.clearRect(0,0,150,150);m.save();m.beginPath();m.arc(R,R,R-1,0,7);m.clip();m.fillStyle='rgba(38,40,30,.6)';m.fillRect(0,0,150,150);m.translate(R,R);m.rotate(pl.yaw);
   const P=(x,z)=>[(x-pl.pos.x)*sc,(z-pl.pos.z)*sc];
-  m.fillStyle='rgba(60,90,110,.6)';let [ax,az]=P(-200,40.5);m.fillRect(ax,az,400*sc,200*sc);m.fillStyle='rgba(150,150,140,.7)';for(const c of colliders){const[a1,b1]=P(c.minx,c.minz);m.fillRect(a1,b1,Math.max(1.5,(c.maxx-c.minx)*sc),Math.max(1.5,(c.maxz-c.minz)*sc));}
+  let [ax,az]=P(-200,40.5);if(CUR===1){m.fillStyle='rgba(60,90,110,.6)';m.fillRect(ax,az,400*sc,200*sc);}m.fillStyle='rgba(150,150,140,.7)';for(const c of colliders){const[a1,b1]=P(c.minx,c.minz);m.fillRect(a1,b1,Math.max(1.5,(c.maxx-c.minx)*sc),Math.max(1.5,(c.maxz-c.minz)*sc));}
   m.strokeStyle='rgba(200,190,150,.25)';m.beginPath();[ax,az]=P(-200,-42);m.moveTo(ax,az);m.lineTo(ax+400*sc,az);m.stroke();
   for(const a of allies){if(!a.alive)continue;const[x,z]=P(a.pos.x,a.pos.z);m.fillStyle='#7fd36a';m.beginPath();m.arc(x,z,2.5,0,7);m.fill();}
   for(const e of enemies){if(!e.alive||time-e.lastFire>1.6)continue;const[x,z]=P(e.pos.x,e.pos.z);m.fillStyle='#ff4a3a';m.beginPath();m.arc(x,z,3.2,0,7);m.fill();}
@@ -845,30 +847,32 @@ function updHUD(dt){
 }
 
 /* ================= MENUS ================= */
-const screens=['loadout','menu','missions','briefing','settings','controls','pause','dead','complete','loading'];
+const screens=['choice','credits','loadout','menu','missions','briefing','settings','controls','pause','dead','complete','loading'];
 let settingsFrom='menu';
 function show(id){screens.forEach(s=>$(s).classList.toggle('on',s===id));}
 function hideAll(){screens.forEach(s=>$(s).classList.remove('on'));}
-const MIS=[['1','DAWN AT OMAHA','Normandy · June 1944 — Storm the beach and silence the guns.',1],['2','HEDGEROW HELL','Normandy · June 1944 — First contact with Nightjar.',0],['3','GHOSTS OF PARIS','Paris · August 1944 — Night sabotage with the Resistance.',0],['4','BRIDGE AT NIJMEGEN','Netherlands · Sept 1944 — Hold the bridge against armor.',0],['5','FROZEN FOREST','Ardennes · Dec 1944 — Cut off, outnumbered, freezing.',0],['6','GÖTTERDÄMMERUNG','Germany · 1945 — End the operation. End Kessler.',0]];
-$('mislist').innerHTML=MIS.map(m=>`<div class="mis ${m[3]?'':'lock'}" data-m="${m[0]}"><div class="n">${m[0]}</div><div class="d"><b>${m[1]}</b><small>${m[2]}</small></div><div>${m[3]?'▸':'🔒'}</div></div>`).join('');
-$('mislist').addEventListener('click',e=>{const d=e.target.closest('.mis');if(!d||d.classList.contains('lock'))return;SND.ui();briefing();});
-const BRIEF=['Allied forces are landing across five beaches along the Normandy coast. Your company of the 2nd Rangers has been assigned Sector Dog Green, Omaha.','The naval bombardment has failed to destroy the German positions on the bluffs. An MG42 bunker is covering the draw — the only way off the beach.','Your orders: get off the sand, clear the trench line, and silence that gun. If it keeps firing, the second wave dies in the surf.'];
+let SELECTED=1;
+function renderMissions(){$('mislist').innerHTML=Object.keys(LEVELS).map(Number).sort((a,b)=>a-b).map(n=>{const L=LEVELS[n];return `<div class="mis" data-m="${n}"><div class="n">${n}</div><div class="d"><b>${L.title}</b><small>${L.place} · ${L.date}</small></div><div>${PROGRESS.done[n]?'✓':'▸'}</div></div>`;}).join('');}
+$('mislist').addEventListener('click',e=>{const d=e.target.closest('.mis');if(!d)return;SND.ui();SELECTED=+d.dataset.m;briefing();});
+const BRIEF1=['Allied forces are landing across five beaches along the Normandy coast. Your company of the 2nd Rangers has been assigned Sector Dog Green, Omaha.','The naval bombardment has failed to destroy the German positions on the bluffs. An MG42 bunker is covering the draw — the only way off the beach.','Your orders: get off the sand, clear the trench line, and silence that gun. If it keeps firing, the second wave dies in the surf.'];
 let briefTok=0;
-function briefing(){show('briefing');const tok=++briefTok;const el=$('btext');el.innerHTML=BRIEF.map(()=>'<p></p>').join('');$('bobj').style.display='none';let pi=0,ci=0;const ps=[...el.children];
+function briefing(){show('briefing');const L=LEVELS[SELECTED];const BRIEF=SELECTED===1?BRIEF1:L.brief;$('briefing').querySelector('h3').textContent=`MISSION ${SELECTED} — ${L.title}`;$('briefing').querySelector('p').textContent=`${L.date.toUpperCase()} · ${L.place.toUpperCase()}`;
+  $('bobj').innerHTML=SELECTED===1?'<li>Get off the beach — reach the seawall</li><li>Clear the German trench line on the bluff</li><li>Destroy the MG42 bunker covering the draw</li>':L.objectives.filter(o=>o.text&&o.type!=='choice').map(o=>`<li>${o.text}</li>`).join('');
+  const tok=++briefTok;const el=$('btext');el.innerHTML=BRIEF.map(()=>'<p></p>').join('');$('bobj').style.display='none';let pi=0,ci=0;const ps=[...el.children];
   const tick=()=>{if(tok!==briefTok)return;if(pi>=ps.length){$('bobj').style.display='block';return;}ps[pi].textContent=BRIEF[pi].slice(0,ci+=2);if(ci%6===0)SND.click();if(ci>=BRIEF[pi].length){pi++;ci=0;setTimeout(tick,300);}else setTimeout(tick,14);};tick();}
 function deploy(){briefTok++;show('loading');$('lbar').style.width='0';setTimeout(()=>$('lbar').style.width='60%',50);setTimeout(()=>{$('lbar').style.width='100%';},500);
-  setTimeout(()=>{hideAll();setupMission();playCine(introCine(),startGameplay);},1000);}
+  setTimeout(()=>{hideAll();if(SELECTED!==1){startLevel(SELECTED);return;}switchWorld(1);setupMission();playCine(introCine(),startGameplay);},1000);}
 function enterPlay(){hideAll();state='play';document.body.classList.add('play');document.body.classList.remove('cine');musicDuck=.3;applyVolumes();VM.visible=true;camera.fov=S.fov;camera.updateProjectionMatrix();if(!isTouch)reqLock();}
 function pauseGame(){if(state!=='play')return;state='pause';exitLock();document.body.classList.remove('play');show('pause');mouseL=mouseR=false;tState.fire=false;}
 function resume(){hideAll();state='play';document.body.classList.add('play');if(!isTouch)reqLock();}
-function toMenu(){if(pModel)pModel.g.visible=false;exitLock();state='menu';cine=null;document.body.classList.remove('play','cine');clearDynamic();musicDuck=1;applyVolumes();$('timer').style.display='none';$('prompt').style.display='none';$('subs').innerHTML='';subQ=[];show('menu');VM.visible=false;camera.fov=55;camera.updateProjectionMatrix();
+function toMenu(){switchWorld(1);$('bossbar').style.display='none';$('dead').querySelector('h1').textContent='K.I.A.';if(pModel)pModel.g.visible=false;exitLock();state='menu';cine=null;document.body.classList.remove('play','cine');clearDynamic();musicDuck=1;applyVolumes();$('timer').style.display='none';$('prompt').style.display='none';$('subs').innerHTML='';subQ=[];show('menu');VM.visible=false;camera.fov=55;camera.updateProjectionMatrix();
   myBoat.position.set(0,0,62);myBoat.rotation.set(0,0,0);myBoat.userData.ramp.rotation.x=0;if(myBoat.userData.dummies){myBoat.userData.dummies.forEach(d=>myBoat.remove(d));myBoat.userData.dummies=null;}}
 document.addEventListener('click',e=>{audioInit();const b=e.target.closest('[data-a]');if(!b)return;const a=b.dataset.a;SND.ui();
   if(a==='campaign')show('missions');else if(a==='settings'){settingsFrom='menu';openSettings();}else if(a==='controls')show('controls');
   else if(a==='back'||a==='cback')show('menu');else if(a==='back2'){briefTok++;show('missions');}else if(a==='deploy'){saveLO();deploy();}else if(a==='loadout'){openLoadout(false);}else if(a==='toLoadout'){briefTok++;openLoadout(true);}else if(a==='loBack'){saveLO();show(loFromBrief?'briefing':'menu');}
   else if(a==='sback'){saveS();show(settingsFrom);}else if(a==='sreset'){S=Object.assign({},DEF);applySettings();renderSettings();saveS();}
   else if(a==='resume')resume();else if(a==='psettings'){settingsFrom='pause';openSettings();}else if(a==='restartcp')restartCP();else if(a==='quit')toMenu();
-  else if(a==='replay'){hideAll();deploy();}});
+  else if(a==='replay'){hideAll();deploy();}else if(a==='next'){SELECTED=CUR+1;briefing();}else if(a==='credBack'){toMenu();}});
 $('skip').addEventListener('click',e=>{e.stopPropagation();endCine(true);});
 $('skip').addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();endCine(true);});
 // settings UI
@@ -888,7 +892,7 @@ $('srows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.k)retur
 let curShadow=-1;
 let curQ=null;function applySettings(){const q=QUAL[S.quality];renderer.setPixelRatio(q.pr);
   if(curQ!==S.quality){curQ=S.quality;if(q.ocean)buildWater2();if(water2)water2.visible=!!q.ocean;water.visible=!q.ocean;buildGrass(q.grass);buildComposer(q.post,q.bloom);}
-  resize();scene.fog.density=q.fog;partLimit=q.parts;renderer.toneMappingExposure=S.brightness;
+  resize();scene.fog.density=q.fog*(typeof ENV_FOGK==='number'?ENV_FOGK:1);partLimit=q.parts;renderer.toneMappingExposure=S.brightness;
   if(curShadow!==q.sh){curShadow=q.sh;renderer.shadowMap.enabled=q.sh>0;sun.castShadow=q.sh>0;if(q.sh){sun.shadow.mapSize.set(q.sh,q.sh);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}}scene.traverse(o=>{if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);}});}
   canvas.classList.toggle('grade',S.grade);$('grain').style.display=S.grain?'block':'none';$('vig').style.display=S.vignette?'block':'none';$('fps').style.display=S.fps?'block':'none';
   if(state==='play'){camera.fov=S.fov;camera.updateProjectionMatrix();}applyVolumes();}
@@ -919,6 +923,386 @@ $('loSmith').addEventListener('click',e=>{const b=e.target.closest('[data-as]');
 function updLoadoutPreview(dt){if(!loR||!$('loadout').classList.contains('on')||!loGun)return;loSpin+=dt*.5;loGun.rotation.y=Math.PI/2+Math.sin(loSpin)*.6;loGun.rotation.x=.12;
   const cv=$('loPrev');const w=cv.clientWidth|0,h=cv.clientHeight|0;if(w&&h&&(cv.width!==w*loR.getPixelRatio()|0)){loR.setSize(w,h,false);loCam.aspect=w/h;loCam.updateProjectionMatrix();}loR.render(loScene,loCam);}
 
+/* ================= CAMPAIGN ENGINE (missions 2-10) ================= */
+let CUR=1,LV=null,M1W=null;
+let PROGRESS={done:{}};try{const p=JSON.parse(localStorage.getItem('ir_progress')||'null');if(p)PROGRESS=p;}catch(e){}
+function saveProgress(){try{localStorage.setItem('ir_progress',JSON.stringify(PROGRESS))}catch(e){}}
+
+// ---------- materials ----------
+const CMAT={};
+function cmat(){if(CMAT.ok)return CMAT;CMAT.ok=1;
+  const plain=(base,cols,n,sz,rep)=>ctex(256,256,(x,w,h)=>{x.fillStyle=base;x.fillRect(0,0,w,h);speck(x,w,h,n,cols,sz);},rep);
+  CMAT.plaster=new THREE.MeshStandardMaterial({map:plain('#b9ab8f',['#9c8f74','#cfc2a6','#8a7e66'],3000,3),roughness:.95});
+  CMAT.plasterDark=new THREE.MeshStandardMaterial({map:plain('#8d8475',['#6f685c','#a29a8a'],3000,3),roughness:.95});
+  CMAT.brick=new THREE.MeshStandardMaterial({map:ctex(256,256,(x,w,h)=>{x.fillStyle='#6b3b2a';x.fillRect(0,0,w,h);for(let r=0;r<16;r++)for(let c=0;c<9;c++){x.fillStyle=`hsl(${12+rnd(-4,4)},${35+rnd(-8,8)}%,${26+rnd(-5,6)}%)`;x.fillRect(c*32+(r%2)*16-16,r*16+1,30,14);}}),roughness:.9});
+  CMAT.roof=new THREE.MeshStandardMaterial({map:ctex(256,256,(x,w,h)=>{x.fillStyle='#5a3226';x.fillRect(0,0,w,h);for(let r=0;r<16;r++)for(let c=0;c<16;c++){x.fillStyle=`hsl(${10+rnd(-4,4)},40%,${22+rnd(-5,5)}%)`;x.fillRect(c*16+(r%2)*8,r*16,15,15);}}),roughness:.85});
+  CMAT.slate=new THREE.MeshStandardMaterial({color:0x3d4148,roughness:.7});
+  CMAT.stone=new THREE.MeshStandardMaterial({map:plain('#7d7a72',['#5f5c55','#9a968c'],4000,4),roughness:.95});
+  CMAT.cobble=new THREE.MeshStandardMaterial({map:ctex(256,256,(x,w,h)=>{x.fillStyle='#3e3d3a';x.fillRect(0,0,w,h);for(let i=0;i<500;i++){x.fillStyle=`hsl(30,5%,${22+rnd(-6,8)}%)`;x.beginPath();x.ellipse(rnd(0,w),rnd(0,h),rnd(5,9),rnd(4,7),rnd(0,3),0,7);x.fill();}},[40,40]),roughness:.85});
+  CMAT.wood=MAT.wood;CMAT.metal=MAT.gunMetal;CMAT.rust=MAT.rust;CMAT.concrete=MAT.concrete;
+  CMAT.hedge=new THREE.MeshStandardMaterial({color:0x2f4a1f,roughness:1,flatShading:true});
+  CMAT.pine=new THREE.MeshStandardMaterial({color:0x1f3322,roughness:1,flatShading:true});
+  CMAT.snow=new THREE.MeshStandardMaterial({color:0xe9eef2,roughness:.9});
+  CMAT.snowPine=new THREE.MeshStandardMaterial({color:0x8fa39a,roughness:1,flatShading:true});
+  CMAT.rock=new THREE.MeshStandardMaterial({map:plain('#6e6a63',['#4f4c47','#8a857c'],4000,5,[3,3]),roughness:1,flatShading:true});
+  CMAT.dark=new THREE.MeshStandardMaterial({color:0x1a1916,roughness:1});
+  CMAT.train=new THREE.MeshStandardMaterial({color:0x22252a,roughness:.6,metalness:.4});
+  CMAT.glow=new THREE.MeshBasicMaterial({color:0xffd9a0});
+  CMAT.crate=new THREE.MeshStandardMaterial({map:ctex(128,128,(x,w,h)=>{x.fillStyle='#6b5434';x.fillRect(0,0,w,h);x.strokeStyle='#3e2f1c';x.lineWidth=6;x.strokeRect(3,3,w-6,h-6);x.beginPath();x.moveTo(0,0);x.lineTo(w,h);x.stroke();speck(x,w,h,400,['#5a4529','#7d6440'],2);}),roughness:.9});
+  CMAT.water=new THREE.MeshStandardMaterial({color:0x2f4148,roughness:.2,metalness:.6,transparent:true,opacity:.92});
+  return CMAT;}
+
+// ---------- environment presets ----------
+const ENV={
+  dawn:   {elev:84,az:-35,turb:9,ray:2.2,sun:0xffbe80,sunI:4.2,hemiS:0x9aa6b4,hemiG:0x4a3e30,hemiI:1.6,fog:0x8c8174,fogK:1,exp:1},
+  day:    {elev:55,az:40,turb:6,ray:1.4,sun:0xfff2dc,sunI:4.6,hemiS:0xa9bccc,hemiG:0x4e4a3c,hemiI:1.8,fog:0x9aa4a6,fogK:.9,exp:1},
+  overcast:{elev:50,az:20,turb:18,ray:.6,sun:0xdfe4ea,sunI:2.6,hemiS:0xb8c0c8,hemiG:0x56544c,hemiI:2.2,fog:0x8e969a,fogK:1.5,exp:1},
+  dusk:   {elev:86,az:120,turb:12,ray:3,sun:0xff9a55,sunI:3.6,hemiS:0x8a7f8c,hemiG:0x4a3a2e,hemiI:1.4,fog:0x8a6f5e,fogK:1.1,exp:1},
+  rain:   {elev:45,az:0,turb:20,ray:.4,sun:0xc8d0d4,sunI:1.8,hemiS:0x8c9696,hemiG:0x3e4236,hemiI:1.9,fog:0x5e6660,fogK:2.6,exp:1.05},
+  snow:   {elev:60,az:10,turb:20,ray:.5,sun:0xeef2ff,sunI:2.4,hemiS:0xd6dde6,hemiG:0x9aa0a8,hemiI:2.4,fog:0xc4ccd4,fogK:2,exp:.95},
+  night:  {elev:100,az:30,turb:2,ray:.2,sun:0x7f93c8,sunI:.55,hemiS:0x2c3650,hemiG:0x101010,hemiI:.32,fog:0x0a0e15,fogK:2.4,exp:1,night:1},
+  snowNight:{elev:100,az:30,turb:2,ray:.2,sun:0x9aaee0,sunI:.75,hemiS:0x3e4a66,hemiG:0x22262e,hemiI:.55,fog:0x141b26,fogK:2.2,exp:1.05,night:1},
+  interior:{elev:100,az:0,turb:2,ray:.1,sun:0x000000,sunI:0,hemiS:0x6b6458,hemiG:0x2a2620,hemiI:.9,fog:0x14120f,fogK:2.6,exp:1.2,night:1,inside:1}
+};
+let ENV_CUR='dawn';
+function applyEnv(name){ENV_CUR=name;const e=ENV[name];const su=sky.material.uniforms;
+  su.turbidity.value=e.turb;su.rayleigh.value=e.ray;SUN_DIR.setFromSphericalCoords(1,THREE.MathUtils.degToRad(e.elev),THREE.MathUtils.degToRad(e.az));su.sunPosition.value.copy(SUN_DIR);
+  sky.visible=!e.inside;CLOUDS.visible=!e.night;if(FLARE)FLARE.visible=!e.night&&!e.inside&&name!=='overcast'&&name!=='rain'&&name!=='snow';
+  sun.color.setHex(e.sun);sun.intensity=e.sunI;if(e.night){SUN_DIR.set(.3,.8,.4).normalize();}
+  hemi.color.setHex(e.hemiS);hemi.groundColor.setHex(e.hemiG);hemi.intensity=e.hemiI;
+  scene.fog.color.setHex(e.fog);renderer.setClearColor(e.fog);ENV_FOGK=e.fogK;scene.fog.density=QUAL[S.quality].fog*e.fogK;
+  renderer.toneMappingExposure=S.brightness*e.exp;Object.values(MAT).forEach(m=>m.envMapIntensity=e.night?.08:.45);}
+let ENV_FOGK=1;
+
+// ---------- weather ----------
+let WX=null;
+function setWeather(kind){if(WX){scene.remove(WX.pts);WX=null;}if(!kind)return;const n=kind==='rain'?(isTouch?1500:3500):(isTouch?1200:2600);
+  const g=new THREE.BufferGeometry();const p=new Float32Array(n*3);for(let i=0;i<n;i++){p[i*3]=rnd(-30,30);p[i*3+1]=rnd(0,25);p[i*3+2]=rnd(-30,30);}g.setAttribute('position',new THREE.BufferAttribute(p,3));
+  const m=new THREE.PointsMaterial({color:kind==='rain'?0xaab4c0:0xffffff,size:kind==='rain'?.05:.09,transparent:true,opacity:kind==='rain'?.55:.85,depthWrite:false});
+  const pts=new THREE.Points(g,m);pts.frustumCulled=false;scene.add(pts);WX={pts,kind,n};}
+function updWeather(dt){if(!WX)return;WX.pts.visible=!(CUR===10&&camera.position.z<-47&&Math.abs(camera.position.x)<52);const a=WX.pts.geometry.attributes.position.array;const c=camera.position;const sp=WX.kind==='rain'?22:1.6;
+  for(let i=0;i<WX.n;i++){let x=a[i*3],y=a[i*3+1],z=a[i*3+2];y-=sp*dt;if(WX.kind==='snow'){x+=Math.sin(time*.8+i)*dt*.6;z+=Math.cos(time*.6+i*.3)*dt*.4;}
+    if(y<-2){y=25;x=rnd(-30,30);z=rnd(-30,30);}a[i*3]=x;a[i*3+1]=y;a[i*3+2]=z;}
+  WX.pts.position.set(c.x,c.y-8,c.z);WX.pts.geometry.attributes.position.needsUpdate=true;}
+
+// ---------- level builder ----------
+function makeBuilder(root,stat,coll){const C=cmat();
+  const reg=(m,col=true)=>{root.add(m);m.updateMatrixWorld(true);m.traverse(o=>{if(o.isMesh)stat.push(o);});if(col){const b=new THREE.Box3().setFromObject(m);coll.push({minx:b.min.x,maxx:b.max.x,minz:b.min.z,maxz:b.max.z,miny:b.min.y,maxy:b.max.y});}return m;};
+  const bx=(w,h,d,mat,x,y,z,ry=0,col=true)=>{const m=box(w,h,d,mat);m.position.set(x,y,z);m.rotation.y=ry;return reg(m,col);};
+  const B={root,reg,bx,
+    house(x,z,w,d,o={}){const h=o.h||(3.2*(o.floors||1)),y=H(x,z)-.1,mat=o.mat||C.plaster,t=.35,rot=o.rot||0;const g=new THREE.Group();g.position.set(x,y,z);g.rotation.y=rot;
+      const wall=(ww,hh,dd,px,py,pz)=>{const m=box(ww,hh,dd,mat);m.position.set(px,py,pz);g.add(m);};
+      const door=1.5,dh=2.3;wall((w-door)/2,h,t,-(w+door)/4,h/2,d/2);wall((w-door)/2,h,t,(w+door)/4,h/2,d/2);wall(door,h-dh,t,0,dh+(h-dh)/2,d/2);
+      if(o.backDoor){wall((w-door)/2,h,t,-(w+door)/4,h/2,-d/2);wall((w-door)/2,h,t,(w+door)/4,h/2,-d/2);wall(door,h-dh,t,0,dh+(h-dh)/2,-d/2);}else wall(w,h,t,0,h/2,-d/2);
+      wall(t,h,d,-w/2,h/2,0);wall(t,h,d,w/2,h/2,0);
+      for(const sx of[-1,1])for(let f=0;f<(o.floors||1);f++){const win=box(.9,1.1,.05,C.dark);win.position.set(sx*w*.3,1.6+f*3.2,d/2+.19);g.add(win);const win2=win.clone();win2.position.z=-d/2-.19;g.add(win2);}
+      if(o.ruined){for(let i=0;i<6;i++){const r=box(rnd(.4,1.4),rnd(.3,.8),rnd(.4,1.2),C.stone);r.position.set(rnd(-w/2,w/2),.3,rnd(-d/2,d/2)+d/2+1.2);r.rotation.set(rnd(0,1),rnd(0,3),0);g.add(r);}}
+      else if(o.flat){const r=box(w+.4,.3,d+.4,C.stone);r.position.y=h+.15;g.add(r);}
+      else{const rh=Math.min(w,d)*.38,rl=Math.hypot(d/2+.4,rh);for(const s of[-1,1]){const r=box(w+.6,.2,rl,o.roofMat||C.roof);r.position.set(0,h+rh/2,s*(d/4+.1));r.rotation.x=s*Math.atan2(rh,d/2+.4);g.add(r);}}
+      if(o.floor2!==false&&(o.floors||1)>1){const fl=box(w-.7,.2,d-.7,C.wood);fl.position.y=3.2;g.add(fl);}
+      g.traverse(c=>{if(c.isMesh){c.castShadow=true;c.receiveShadow=true;}});root.add(g);g.updateMatrixWorld(true);
+      g.traverse(c=>{if(c.isMesh&&c.material!==C.dark){stat.push(c);const b=new THREE.Box3().setFromObject(c);if(b.max.y-b.min.y>1.2||c.position.y>h-0.5&&false)coll.push({minx:b.min.x,maxx:b.max.x,minz:b.min.z,maxz:b.max.z,miny:b.min.y,maxy:b.max.y});}});return g;},
+    block(x,z,w,d,h,mat){const y=H(x,z);const m=bx(w,h,d,mat||C.plasterDark,x,y+h/2-.1,z);for(let f=0;f<Math.floor(h/3.3);f++)for(let i=0;i<Math.floor(w/3);i++){const wi=box(.9,1.2,.05,C.dark);wi.position.set(x-w/2+1.5+i*3,y+1.8+f*3.3,z+d/2+.03);root.add(wi);const w2=wi.clone();w2.position.z=z-d/2-.03;root.add(w2);}const r=box(w+.3,.4,d+.3,C.slate);r.position.set(x,y+h+.1,z);root.add(r);return m;},
+    hedge(x1,z1,x2,z2,gaps=[]){const L=Math.hypot(x2-x1,z2-z1),n=Math.ceil(L/1.5),ux=(x2-x1)/L,uz=(z2-z1)/L;const geo=new THREE.IcosahedronGeometry(1,1);let segStart=0;
+      const inGap=t=>gaps.some(g=>Math.abs(t-g)<2.4);
+      for(let i=0;i<=n;i++){const t=i/n*L;if(inGap(t))continue;const x=x1+ux*t,z=z1+uz*t;const m=new THREE.Mesh(geo,C.hedge);const s=rnd(1.1,1.6);m.scale.set(s,rnd(1.1,1.5),s);m.position.set(x+rnd(-.3,.3),H(x,z)+1,z+rnd(-.3,.3));m.castShadow=true;m.receiveShadow=true;root.add(m);stat.push(m);}
+      let t0=0;const ts=[...gaps.map(g=>[g-2.4,g+2.4])].sort((a,b)=>a[0]-b[0]);const segs=[];for(const [a,b] of ts){if(a>t0)segs.push([t0,a]);t0=Math.max(t0,b);}if(t0<L)segs.push([t0,L]);
+      for(const [a,b] of segs){const xa=x1+ux*a,za=z1+uz*a,xb=x1+ux*b,zb=z1+uz*b;coll.push({minx:Math.min(xa,xb)-1,maxx:Math.max(xa,xb)+1,minz:Math.min(za,zb)-1,maxz:Math.max(za,zb)+1,miny:-50,maxy:H((xa+xb)/2,(za+zb)/2)+2.4});}},
+    tree(x,z,kind='oak',s=1){const g=new THREE.Group();const y=H(x,z);g.position.set(x,y,z);
+      if(kind==='pine'||kind==='snowpine'){const t=new THREE.Mesh(new THREE.CylinderGeometry(.18*s,.3*s,3*s,6),MAT.trunk);t.position.y=1.5*s;g.add(t);for(let k=0;k<4;k++){const c=new THREE.Mesh(new THREE.ConeGeometry((2.4-k*.45)*s,2.6*s,7),kind==='snowpine'?C.snowPine:C.pine);c.position.y=(2.6+k*1.5)*s;g.add(c);if(kind==='snowpine'){const sc=new THREE.Mesh(new THREE.ConeGeometry((2.1-k*.45)*s,.7*s,7),C.snow);sc.position.y=(3.2+k*1.5)*s;g.add(sc);}}}
+      else{const t=new THREE.Mesh(new THREE.CylinderGeometry(.22*s,.35*s,3.4*s,6),MAT.trunk);t.position.y=1.7*s;g.add(t);for(let k=0;k<3;k++){const f=new THREE.Mesh(new THREE.IcosahedronGeometry((2.4-k*.4)*s,1),C.hedge);f.position.set(rnd(-.6,.6),(3.6+k*1.1)*s,rnd(-.6,.6));g.add(f);}}
+      g.traverse(c=>{if(c.isMesh){c.castShadow=true;}});root.add(g);g.updateMatrixWorld(true);stat.push(g.children[0]);coll.push({minx:x-.35*s,maxx:x+.35*s,minz:z-.35*s,maxz:z+.35*s,miny:y-1,maxy:y+3*s});return g;},
+    forest(n,x0,z0,x1,z1,kind,avoid){for(let i=0;i<n;i++){const x=rnd(x0,x1),z=rnd(z0,z1);if(avoid&&avoid(x,z))continue;B.tree(x,z,kind,rnd(.8,1.3));}},
+    sandbags(x,z,len=3.5,ry=0){const y=H(x,z);if(PROPS.sandbag){const n=Math.max(1,Math.round(len/3.5));for(let i=0;i<n;i++){const m=PROPS.sandbag.clone(true);const off=(i-(n-1)/2)*3.5;m.position.set(x+Math.cos(ry)*off,y-.02,z-Math.sin(ry)*off);m.rotation.y=ry;m.scale.z=1.5;reg(m);}}else bx(len,1,1,MAT.bags,x,y+.45,z,ry);},
+    foxhole(x,z){for(let i=0;i<4;i++){const a=i*Math.PI/2;B.sandbags(x+Math.sin(a)*2.2,z+Math.cos(a)*2.2,3.5,a);}},
+    wire(x,z,ry=0){if(!PROPS.wire)return;const m=PROPS.wire.clone(true);m.position.set(x,H(x,z),z);m.rotation.y=ry;root.add(m);},
+    hedgehog(x,z){if(PROPS.hedgehog){const m=PROPS.hedgehog.clone(true);m.position.set(x,H(x,z),z);m.rotation.y=rnd(0,3);reg(m);}},
+    crates(x,z,n=3){for(let i=0;i<n;i++){const s=rnd(.8,1.1);bx(s,s,s,C.crate,x+(i%2)*1.1+rnd(-.1,.1),H(x,z)+s/2+(i>1?1:0),z+rnd(-.2,.2),rnd(0,.3));}},
+    barrel(x,z,fire){const m=new THREE.Mesh(new THREE.CylinderGeometry(.35,.35,.95,10),C.rust);m.position.set(x,H(x,z)+.47,z);m.castShadow=true;reg(m);if(fire){LV.emit.push({pos:new V3(x,H(x,z)+1.1,z),type:'fire',rate:.09,t:0,ttl:1e9});const l=new THREE.PointLight(0xff8a3a,30,14,2);l.position.set(x,H(x,z)+1.6,z);root.add(l);LV.lights.push(l);}},
+    tank(x,z,ry=0){if(PROPS.sherman){const m=PROPS.sherman.clone(true);m.position.set(x,H(x,z)-.05,z);m.rotation.y=ry;reg(m);LV.emit.push({pos:new V3(x,H(x,z)+2.4,z),type:'bsmoke',rate:.45,t:0,ttl:1e9});}},
+    truck(x,z,ry=0){const g=new THREE.Group();const add=(w,h,d,m,px,py,pz)=>{const b=box(w,h,d,m);b.position.set(px,py,pz);g.add(b);};add(2.2,1.2,6,C.train,0,1,0);add(2.1,1.4,1.8,C.train,0,1.7,2.3);add(2.3,.15,3.8,MAT.olive,0,2.6,-.9);
+      for(const [wx,wz] of [[-1.1,2],[1.1,2],[-1.1,-1.6],[1.1,-1.6]]){const w=new THREE.Mesh(new THREE.CylinderGeometry(.45,.45,.3,10),C.dark);w.rotation.z=Math.PI/2;w.position.set(wx,.45,wz);g.add(w);}g.position.set(x,H(x,z),z);g.rotation.y=ry;reg(g);},
+    atgun(x,z,ry=0){const g=new THREE.Group();const add=(m,px,py,pz)=>{m.position.set(px,py,pz);g.add(m);return m;};add(box(2.2,1.3,.12,MAT.feld),0,1.1,0);const b=add(new THREE.Mesh(new THREE.CylinderGeometry(.08,.11,3.6,8),C.metal),0,1.15,1.7);b.rotation.x=Math.PI/2;
+      add(box(.5,.5,1.4,MAT.feld),0,.9,.3);for(const sx of[-1,1]){const w=add(new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.2,12),C.dark),sx*1,.5,-.1);w.rotation.z=Math.PI/2;const tr=add(box(.12,.12,2.4,MAT.feld),sx*.5,.35,-1.4);tr.rotation.y=sx*.25;}
+      g.position.set(x,H(x,z),z);g.rotation.y=ry;g.traverse(c=>{if(c.isMesh)c.castShadow=true;});reg(g);return g;},
+    bridge(x,z0,z1,w,y){const L=Math.abs(z1-z0),zc=(z0+z1)/2;bx(w,.6,L,C.concrete,x,y-.3,zc);for(const s of[-1,1]){bx(.3,1.1,L,C.rust,x+s*(w/2-.15),y+.55,zc);
+        for(let k=0;k<=L/6;k++){const zz=Math.min(z0,z1)+k*6;const v=box(.25,4,.25,C.rust);v.position.set(x+s*(w/2-.1),y+2,zz);root.add(v);stat.push(v);}const top=box(.3,.3,L,C.rust);top.position.set(x+s*(w/2-.1),y+4,zc);root.add(top);}
+      for(let k=1;k<4;k++){const zz=Math.min(z0,z1)+k*L/4;bx(3,Math.max(1,y+6),3,C.stone,x,(y-6)/2,zz,0,false);}
+      for(const zz of[z0,z1]){for(const s of[-1,1])bx(2.2,9,2.2,C.stone,x+s*(w/2+1.3),y+4.5,zz);}},
+    rails(x,z0,z1){const L=Math.abs(z1-z0),zc=(z0+z1)/2;for(const s of[-.72,.72]){const r=box(.08,.12,L,C.metal);r.position.set(x+s,H(x,zc)+.06,zc);root.add(r);}for(let k=0;k<L;k+=1.2){const t=box(2.4,.08,.25,C.wood);t.position.set(x,H(x,z0)+.03,Math.min(z0,z1)+k);root.add(t);}},
+    traincar(x,z,len=12,loco=false){const g=new THREE.Group();const add=(m,px,py,pz)=>{m.position.set(px,py,pz);g.add(m);return m;};
+      if(loco){const b=add(new THREE.Mesh(new THREE.CylinderGeometry(1.25,1.25,len*.65,14),C.train),0,2.4,-len*.12);b.rotation.x=Math.PI/2;add(box(3,3.2,len*.3,C.train),0,2.5,len*.32);add(new THREE.Mesh(new THREE.CylinderGeometry(.35,.45,1.3,10),C.train),0,4,-len*.36);}
+      else{add(box(2.9,2.8,len,C.train),0,2.3,0);add(box(3.1,.2,len+.2,C.slate),0,3.8,0);const st=add(box(2.95,.5,1.4,MAT.feld),0,2.6,0);}
+      for(let k=-1;k<=1;k+=2)for(let j=0;j<3;j++){const w=add(new THREE.Mesh(new THREE.CylinderGeometry(.5,.5,.2,12),C.dark),k*1.3,.5,(j-1)*len*.32);w.rotation.z=Math.PI/2;}
+      g.position.set(x,H(x,z),z);g.traverse(c=>{if(c.isMesh)c.castShadow=true;});reg(g);return g;},
+    lamp(x,z,light=true){bx(.12,4.2,.12,C.metal,x,H(x,z)+2.1,z,0,false);const b=new THREE.Mesh(new THREE.SphereGeometry(.2,8,6),C.glow);b.position.set(x,H(x,z)+4.2,z);root.add(b);if(light&&LV.lights.length<8){const l=new THREE.PointLight(0xffc88a,40,18,2);l.position.set(x,H(x,z)+4,z);root.add(l);LV.lights.push(l);}},
+    church(x,z){B.house(x,z,10,16,{h:7,mat:C.stone,roofMat:C.slate});bx(4,16,4,C.stone,x,H(x,z)+8,z-9);const sp=new THREE.Mesh(new THREE.ConeGeometry(2.8,6,4),C.slate);sp.position.set(x,H(x,z)+19,z-9);sp.rotation.y=Math.PI/4;root.add(sp);},
+    rock(x,z,s=4){const m=new THREE.Mesh(new THREE.DodecahedronGeometry(s,0),C.rock);m.position.set(x,H(x,z)+s*.3,z);m.rotation.set(rnd(0,3),rnd(0,3),0);m.scale.y=rnd(.6,1);m.castShadow=true;m.receiveShadow=true;return reg(m);},
+    bunker(x,z,ry=0){if(PROPS.bunker){const m=PROPS.bunker.clone(true);m.position.set(x,H(x,z)-.1,z);m.rotation.y=ry;reg(m);}else bx(6,3.5,6,C.concrete,x,H(x,z)+1.7,z);},
+    water(y,x0,z0,x1,z1){const m=new THREE.Mesh(new THREE.PlaneGeometry(x1-x0,z1-z0,30,30),C.water);m.rotation.x=-Math.PI/2;m.position.set((x0+x1)/2,y,(z0+z1)/2);m.receiveShadow=true;root.add(m);LV.water=m;},
+    marker(x,z,col=0xe9c46a){const m=new THREE.Mesh(new THREE.TorusGeometry(.6,.05,6,24),new THREE.MeshBasicMaterial({color:col}));m.rotation.x=-Math.PI/2;m.position.set(x,H(x,z)+.05,z);root.add(m);return m;},
+    item(x,z){const g=new THREE.Group();const c=box(.5,.12,.35,MAT.leather);c.position.y=.06;g.add(c);const p=box(.36,.02,.26,new THREE.MeshStandardMaterial({color:0xd8cfb0}));p.position.y=.13;g.add(p);g.position.set(x,H(x,z)+.9,z);root.add(g);return g;},
+    gridRooms(map,ox,oz,cell=4,h=4,mat){const rows=map.trim().split('\n').map(r=>r.trim());const y=0;const C2=mat||C.concrete;
+      rows.forEach((r,j)=>{let i=0;while(i<r.length){if(r[i]==='#'){let k=i;while(k<r.length&&r[k]==='#')k++;const w=(k-i)*cell;bx(w,h,cell,C2,ox+(i*cell)+w/2,y+h/2,oz+j*cell+cell/2);i=k;}else i++;}});
+      const W=rows[0].length*cell,D=rows.length*cell;const ceil=box(W,.5,D,C2);ceil.position.set(ox+W/2,h+.25,oz+D/2);root.add(ceil);stat.push(ceil);
+      const fl=box(W,.2,D,C.stone);fl.position.set(ox+W/2,-.05,oz+D/2);fl.receiveShadow=true;root.add(fl);
+      rows.forEach((r,j)=>{for(let i=0;i<r.length;i++){if(r[i]==='L'&&LV.lights.length<10){const l=new THREE.PointLight(0xffd7a0,25,16,2);l.position.set(ox+i*cell+cell/2,h-.4,oz+j*cell+cell/2);root.add(l);LV.lights.push(l);const b=box(.8,.1,.3,C.glow);b.position.copy(l.position).add(new V3(0,.3,0));root.add(b);}}});}
+  };return B;}
+
+function terrainMesh(Hf,colFn,size=320,seg=150,cx=0,cz=0){const g=new THREE.PlaneGeometry(size,size,seg,seg);g.rotateX(-Math.PI/2);g.translate(cx,0,cz);const p=g.attributes.position,col=new Float32Array(p.count*3),c=new THREE.Color();
+  for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),y=Hf(x,z);p.setY(i,y);c.setHex(colFn(x,z,y));const n=.9+Math.random()*.15;col[i*3]=c.r*n;col[i*3+1]=c.g*n;col[i*3+2]=c.b*n;}
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();const m=new THREE.Mesh(g,MAT.sand);m.receiveShadow=true;return m;}
+const nz=(x,z,a=1)=>(Math.sin(x*.05+z*.03)*1.2+Math.sin(x*.11-z*.07)*.6+Math.sin(x*.023+z*.051)*1.5)*a;
+
+// ---------- the nine new missions ----------
+const LEVELS={};
+const riverH=(x,z)=>{const d=Math.abs(z);const bank=d<26?-4+(d/26)*2:d<32?-2+(d-26)/6*5:3+nz(x,z,.25);return bank;};
+const riverCol=(x,z,y)=>y<-1?0x3b3a33:y<2.6?0x6b6250:0x5a6438;
+LEVELS[2]={title:'HEDGEROW HELL',op:'OPERATION OVERLORD',place:'Bocage country, Normandy',date:'June 12, 1944 — 14:10',env:'day',grass:18000,artillery:false,
+  brief:['Six days after D-Day, the advance has stalled in the bocage — a maze of ancient hedgerows, each one a natural fortress.','A Resistance radio operator, code-named Nightjar, has asked for an American unit at a farmhouse south of Saint-Lô. She says she has information worth dying for.','Break through the hedgerows, reach the farm, and keep her alive.'],
+  H:(x,z)=>nz(x,z,.9),col:(x,z,y)=>y>1.5?0x55663a:0x4c5a32,start:[0,85,0],
+  build(B){B.hedge(-110,40,110,40,[110-20,110+25]);B.hedge(-110,0,110,0,[110+5]);B.hedge(-110,-40,110,-40,[110-30,110+30]);B.hedge(-60,90,-60,-100);B.hedge(60,90,60,-100);
+    B.house(0,-75,12,9,{floors:2,backDoor:true});B.house(-22,-80,8,6,{mat:cmat().stone});B.house(20,-72,7,10,{mat:cmat().stone,flat:true});B.truck(10,-60,.4);B.crates(-8,-62,4);B.sandbags(-20,36,7);B.sandbags(26,36,7);B.barrel(-5,-58,true);
+    B.forest(26,-110,-130,110,-95,'oak');B.forest(12,-100,60,-65,100,'oak');B.forest(12,65,60,100,100,'oak');for(let i=0;i<5;i++)B.tree(rnd(-50,50),rnd(-30,-10),'oak');},
+  objectives:[
+    {type:'clear',text:'Break through the first hedgerow',spawn:[{g:'f1',type:'mg',wid:'mg42',at:[[-20,36.5],[26,36.5]]},{g:'f1',at:[[-35,37],[0,37],[12,38],[40,36]],trench:true}],
+      lines:[['LT. HAYES (radio)','Kane, these hedgerows are death traps. Every field is a fortress.','h2_1'],['SGT. MILLER','Stay off the open ground! Hug the hedges!','m2_1']]},
+    {type:'clear',text:'Push through the second field',checkpoint:true,spawn:[{g:'f2',at:[[-30,-3],[-10,-2],[5,-3],[22,-2],[38,-3],[0,-20],[-25,-25]],trench:true}],lines:[['PVT. RUIZ','Krauts behind the next hedge!','r2_1']]},
+    {type:'reach',text:'Reach the farmhouse',pos:[0,-66],r:6,checkpoint:true,spawn:[{g:'f3',at:[[-20,-45],[20,-48],[0,-52]]}],lines:[['LT. HAYES (radio)','Your contact is at that farm. Code name Nightjar.','h2_2']]},
+    {type:'talk',lines:[['NIGHTJAR (radio)','Sergeant Kane. They told me you would come.','n2_1',3.4],['KANE','Nightjar? Where are you?','k2_1',2.4],['NIGHTJAR (radio)','Watching you. The Germans are coming back for this house. Hold it, or we both die here.','n2_2',4.6]]},
+    {type:'defend',text:'Hold the farmhouse',pos:[0,-70],checkpoint:true,waves:[{n:6,from:[[-50,-110],[0,-115],[50,-110]]},{n:7,from:[[-70,-60],[-70,-90]]},{n:8,from:[[70,-60],[70,-95],[0,-115]],smg:true}]}
+  ],
+  outro:[['NIGHTJAR (radio)','You fight well, Americans. Come to Paris. I will show you what they are hiding.','n2_3',4.4],['KANE','Hiding what?','k2_2',2],['NIGHTJAR (radio)','Not on the radio, Sergeant. Paris.','n2_4',3]]};
+
+LEVELS[3]={title:'GHOSTS OF PARIS',op:'THE LIBERATION OF PARIS',place:'Rail yards, northern Paris',date:'August 19, 1944 — 23:40',env:'night',grass:0,artillery:false,
+  brief:['Paris is rising. The Resistance is fighting in the streets, and the Germans are pulling out everything they can by rail.','Nightjar has located supply trains loaded with crates stamped with a single word: Götterdämmerung.','Move through the city with her network, reach the rail yard, and burn those trains.'],
+  H:(x,z)=>0,col:()=>0x34332f,ground:'cobble',start:[0,85,0],
+  build(B){const C=cmat();for(const sx of[-1,1])for(let k=0;k<6;k++){const z=70-k*22;if(z<-20)continue;B.block(sx*16,z,12,16,rnd(10,16),k%2?C.plasterDark:C.plaster);if(k%2===0)B.lamp(sx*8,z+8);}
+    B.block(-40,40,14,30,14,C.brick);B.block(40,30,14,30,12,C.plasterDark);B.truck(-5,50,.2);B.crates(6,30,4);B.barrel(-6,20,true);B.sandbags(0,12,7);
+    for(const x of[-25,-10,10,25])B.rails(x,-20,-110);B.traincar(-25,-55,12,true);B.traincar(-25,-70,12);B.traincar(-25,-84,12);B.traincar(10,-70,12,true);B.traincar(10,-86,12);B.traincar(25,-50,12);
+    B.block(-55,-60,16,40,9,C.brick);B.block(55,-70,16,30,9,C.brick);for(const z of[-40,-80])B.lamp(0,z);B.lamp(40,-12);B.crates(-5,-45,4);B.crates(18,-40,3);B.barrel(30,-30,true);},
+  objectives:[
+    {type:'reach',text:'Follow Nightjar\'s route to the rail yard',pos:[0,30],r:6,lines:[['NIGHTJAR (radio)','Stay in the shadows. Patrols pass every block.','n3_1',3.4]]},
+    {type:'clear',text:'Eliminate the patrol at the barricade',spawn:[{g:'p1',at:[[-3,9],[3,9],[8,6],[-8,5],[0,-2]],trench:true}],lines:[['KANE','Barricade ahead. We go through it.','k3_1',2.6]]},
+    {type:'reach',text:'Enter the rail yard',pos:[-2,-30],r:6,checkpoint:true},
+    {type:'plant',text:'Plant charges on the supply trains',targets:[[-25,-46],[10,-61]],fuse:5,spawn:[{g:'y1',at:[[-15,-60],[0,-75],[20,-55],[-30,-90],[15,-95],[30,-80]]}],lines:[['NIGHTJAR (radio)','Those trains carry the crates. Burn them all.','n3_2',3.2]]},
+    {type:'reach',text:'Escape to the rendezvous',pos:[40,-12],r:5,checkpoint:true,spawn:[{g:'y2',at:[[-20,-100],[0,-105],[25,-100],[45,-60],[-45,-40]],target:[0,-40]}],lines:[['KANE','Charges are hot! Go, go!','k3_2',2.2],['NIGHTJAR (radio)','The alley east of the yard. Run!','n3_3',2.8]]}
+  ],
+  outro:[['NIGHTJAR','Götterdämmerung. The twilight of the gods.','n3_4',3.4],['KANE','A weapon?','k3_3',1.6],['NIGHTJAR','A plan. I do not know yet. But one name is on every crate. Oberst Wolfram Kessler.','n3_5',5]]};
+
+LEVELS[4]={title:'IRON CORRIDOR',op:'THE FALAISE POCKET',place:'Ruined village near Chambois',date:'August 20, 1944 — 19:05',env:'dusk',grass:9000,artillery:true,
+  brief:['The German Seventh Army is trapped in the Falaise Pocket. Its last escape route runs through a ruined crossroads village.','Two 88mm anti-tank guns are stopping our armor from closing the gap.','Clear the village, destroy the guns, and hold the crossroads until the tanks arrive.'],
+  H:(x,z)=>nz(x,z,.45),col:(x,z,y)=>Math.abs(x)<5||Math.abs(z)<5?0x6b5f4c:0x5b5f3a,start:[0,85,0],
+  build(B){const C=cmat();const spots=[[-18,40],[18,45],[-20,18],[20,20],[-30,-8],[30,-6],[-18,-30],[16,-34],[-34,-48],[34,-50],[-12,62],[14,64]];
+    spots.forEach(([x,z],i)=>B.house(x,z,rnd(7,10),rnd(7,9),{ruined:i%3!==0,floors:i%4===0?2:1,mat:i%2?C.stone:C.plaster,rot:x<0?Math.PI/2:-Math.PI/2}));
+    B.church(-38,-80);B.tank(6,30,.8);B.tank(-6,-55,2.2);B.truck(8,-12,.3);B.crates(-6,6,4);B.sandbags(-8,-4,7);B.sandbags(10,4,7,Math.PI/2);B.barrel(4,-20,true);B.barrel(-25,35,true);
+    LV.atguns=[B.atgun(-25,-20,Math.PI),B.atgun(26,-28,Math.PI)];B.forest(20,-110,-110,110,-95,'oak');B.forest(14,-110,-90,-70,90,'oak');B.forest(14,70,-90,110,90,'oak');},
+  objectives:[
+    {type:'clear',text:'Clear the village outskirts',spawn:[{g:'v1',at:[[-18,35],[18,40],[-20,14],[22,15],[0,25],[-5,48]]}],lines:[['LT. HAYES (radio)','The whole German Seventh Army is trying to squeeze through that village. Slam the door.','h4_1',4.4]]},
+    {type:'plant',text:'Destroy the 88mm anti-tank guns',targets:[[-25,-17],[26,-25]],fuse:4,checkpoint:true,spawn:[{g:'v2',at:[[-28,-14],[-20,-25],[30,-24],[22,-33],[0,-30],[-30,-8],[30,-6]]}],lines:[['LT. HAYES (radio)','Our armor can\'t move until those 88s are gone.','h4_2',3.2]]},
+    {type:'defend',text:'Hold the crossroads until the tanks arrive',pos:[0,0],checkpoint:true,waves:[{n:7,from:[[-60,-90],[0,-100],[60,-90]]},{n:8,from:[[-95,-20],[95,-25]],smg:true},{n:9,from:[[-50,-100],[50,-100],[0,-105]]}],lines:[['SGT. MILLER','Here they come! Every gun on that road!','m4_1',3]]}
+  ],
+  outro:[['LT. HAYES (radio)','Armor\'s through. The pocket is closing. Good work, Kane.','h4_3',3.6],['SGT. MILLER','Funny thing, Sarge. Kessler\'s outfit pulled out east before the trap shut.','m4_2',4],['KANE','Like they knew.','k4_1',1.8]]};
+
+LEVELS[5]={title:'BRIDGE AT NIJMEGEN',op:'OPERATION MARKET GARDEN',place:'River Waal, Nijmegen',date:'September 20, 1944 — 15:30',env:'overcast',grass:6000,artillery:true,
+  brief:['Market Garden depends on bridges. The great road bridge at Nijmegen must be taken intact.','German engineers have wired it with demolition charges.','Clear the southern approach, cut the charges, and hold the far end against the counterattack.'],
+  H:riverH,col:riverCol,start:[0,85,0],
+  build(B){const C=cmat();B.water(-.4,-160,-30,160,30);B.bridge(0,32,-32,8,3);for(const [x,z] of [[-20,50],[22,48],[-35,70],[35,72],[-20,-50],[24,-52],[-38,-70],[40,-72]])B.house(x,z,9,8,{floors:2,mat:x<0?C.brick:C.plaster,rot:x<0?Math.PI/2:-Math.PI/2,ruined:Math.random()<.4});
+    B.sandbags(-6,40,7);B.sandbags(6,42,7);B.tank(-12,60,.4);B.truck(12,58,-.3);B.sandbags(0,-40,7);B.sandbags(-8,-42,3.5,Math.PI/2);B.crates(8,-44,3);B.wire(-12,38);B.wire(12,38);B.forest(16,-120,-110,120,-90,'oak');B.forest(12,-120,90,120,110,'oak');},
+  objectives:[
+    {type:'clear',text:'Clear the southern approach',spawn:[{g:'b1',at:[[-6,38],[6,40],[-20,44],[22,42],[0,34],[-30,60]],trench:true}],lines:[['LT. HAYES (radio)','That bridge is the whole operation, Kane. We need it in one piece.','h5_1',3.8]]},
+    {type:'interact',text:'Cut the demolition charges',targets:[[2.5,18],[-2.5,0],[2.5,-18]],hold:2,timeLimit:150,checkpoint:true,label:'cut the demolition charge',spawn:[{g:'b2',at:[[-2,-28],[2,-30],[0,-45],[-8,-44]]}],lines:[['LT. HAYES (radio)','Engineers say the bridge is wired. Cut those charges before they blow it!','h5_2',4]]},
+    {type:'clear',text:'Take the north end of the bridge',spawn:[{g:'b3',at:[[-20,-46],[24,-48],[0,-55],[-10,-60],[12,-62]]}]},
+    {type:'defend',text:'Hold the bridge against the counterattack',pos:[0,-40],checkpoint:true,waves:[{n:7,from:[[-50,-100],[50,-100]]},{n:8,from:[[0,-110],[-70,-60],[70,-60]],smg:true},{n:9,from:[[-40,-105],[40,-105]]}],lines:[['PVT. RUIZ','Panzergrenadiers! Coming down the road!','r5_1',2.8]]}
+  ],
+  outro:[['LT. HAYES (radio)','The bridge is ours.','h5_3',2],['PVT. RUIZ','For now, right Sarge?','r5_2',2],['KANE','For now.','k5_1',1.4]]};
+
+LEVELS[6]={title:'THE GREEN HELL',op:'BATTLE OF HÜRTGEN FOREST',place:'Hürtgen Forest, Germany',date:'November 16, 1944 — 08:15',env:'rain',weather:'rain',grass:5000,artillery:true,treeBursts:true,
+  brief:['The Hürtgen is a dark, freezing pine forest where the trees themselves become weapons — artillery bursts in the canopy and rains splinters down.','A German courier carrying Kessler\'s orders was last seen at a forest command post.','Push through the bunker line and recover those documents.'],
+  H:(x,z)=>nz(x,z,1.6),col:(x,z,y)=>Math.abs(x+Math.sin(z*.05)*8)<4?0x3e3628:0x2f3424,start:[0,85,0],
+  build(B){const path=(x,z)=>Math.abs(x+Math.sin(z*.05)*8)<6;B.forest(260,-120,-120,120,120,'pine',(x,z)=>path(x,z)||Math.hypot(x+20,z+30)<10||Math.hypot(x-25,z+60)<10||Math.hypot(x,z+85)<14||Math.hypot(x,z-85)<8);
+    B.bunker(-20,-30,0);B.bunker(25,-60,0);B.house(0,-90,8,6,{mat:cmat().wood,flat:true});B.sandbags(-6,-80,7);B.sandbags(6,-80,7);B.crates(4,-92,3);B.wire(-15,-20);B.wire(18,-48);for(let i=0;i<10;i++)B.rock(rnd(-60,60),rnd(-100,60),rnd(1,2.5));},
+  objectives:[
+    {type:'reach',text:'Advance through the forest',pos:[-6,20],r:7,spawn:[{g:'h1',at:[[-15,25],[12,15],[-25,5],[20,0]]}],lines:[['SGT. MILLER','Tree bursts! Don\'t lie flat — hug a trunk!','m6_1',3.2]]},
+    {type:'plant',text:'Destroy the bunkers',targets:[[-20,-25],[25,-55]],fuse:4,checkpoint:true,spawn:[{g:'h2',type:'mg',wid:'mg42',at:[[-20,-27],[25,-57]]},{g:'h2',at:[[-28,-35],[-12,-36],[18,-66],[32,-64],[0,-45]]}]},
+    {type:'clear',text:'Clear the command post',checkpoint:true,spawn:[{g:'h3',at:[[-6,-82],[6,-82],[0,-95],[-12,-90],[12,-92],[0,-75]],trench:true}]},
+    {type:'pickup',text:'Recover the courier\'s documents',pos:[2,-91],label:'take the documents'}
+  ],
+  outro:[['KANE','Hayes. These are orders signed by Kessler. Operation Götterdämmerung.','k6_1',3.8],['LT. HAYES (radio)','Then it is real. Get those back to headquarters.','h6_1',3.2]]};
+
+LEVELS[7]={title:'FROZEN FOREST',op:'THE BATTLE OF THE BULGE',place:'The Ardennes, Belgium',date:'December 17, 1944 — 06:50',env:'snow',weather:'snow',grass:0,artillery:true,
+  brief:['Hitler has thrown everything he has left into a surprise offensive through the Ardennes.','Your company has been overrun. Survivors are scattered through the frozen forest.','Survive the ambush, regroup, and hold the foxhole line until dawn.'],
+  H:(x,z)=>nz(x,z,1.1),col:()=>0xe6ebef,snow:true,start:[0,70,0],
+  build(B){B.forest(200,-120,-120,120,120,'snowpine',(x,z)=>Math.hypot(x,z-60)<12||Math.hypot(x+30,z+10)<10||Math.hypot(x-20,z+50)<14||Math.abs(x)<4);
+    B.foxhole(16,-48);B.foxhole(26,-50);B.foxhole(20,-58);B.truck(-4,50,.6);B.tank(8,62,2);B.crates(-30,-8,3);B.barrel(-28,-12,true);for(let i=0;i<8;i++)B.rock(rnd(-60,60),rnd(-90,60),rnd(1,2));},
+  objectives:[
+    {type:'survive',text:'Survive the ambush',time:50,pos:[0,60],from:[[-40,20],[40,25],[-50,60],[50,70]],every:5,max:8,lines:[['PVT. RUIZ','Tanks! Krauts everywhere!','r7_1',2.4],['SGT. MILLER','Find cover and hold on!','m7_1',2.2]]},
+    {type:'reach',text:'Regroup with the stragglers',pos:[-30,-10],r:6,checkpoint:true,allies:[[-32,-8],[-28,-12],[-30,-14]]},
+    {type:'reach',text:'Reach the foxhole line',pos:[20,-50],r:6,spawn:[{g:'s2',at:[[0,-25],[30,-30],[-10,-40]]}]},
+    {type:'defend',text:'Hold the line until dawn',pos:[20,-52],checkpoint:true,waves:[{n:6,from:[[-40,-110],[40,-110]]},{n:7,from:[[-70,-60],[0,-115]]},{n:8,from:[[70,-70],[30,-115]],smg:true},{n:9,from:[[-50,-110],[50,-110],[0,-118]]}]},
+    {type:'talk',lines:[['NIGHTJAR (radio)','Kane... they found us... Kessler is taking me to the—','n7_1',3.6],['KANE','Nightjar? Nightjar! Come in!','k7_1',2.4]]}
+  ],
+  outro:[['LT. HAYES (radio)','We have lost contact with her cell. I am sorry, Kane.','h7_1',3.4],['KANE','Then we go and get her.','k7_2',2]]};
+
+LEVELS[8]={title:'SIEGE OF BASTOGNE',op:'THE BATTLE OF THE BULGE',place:'Bastogne, Belgium',date:'December 23, 1944 — 22:30',env:'snowNight',weather:'snow',grass:0,artillery:true,
+  brief:['Bastogne is surrounded. Seven roads meet here — whoever holds the town holds the Ardennes.','You are low on ammunition, food and hope. A supply drop is coming in tonight.','Hold the square, recover the drop, and silence the sniper in the church tower.'],
+  H:(x,z)=>0,col:()=>0xdfe4ea,snow:true,start:[0,30,0],
+  build(B){const C=cmat();const ring=[[-22,22],[22,22],[-22,-22],[22,-22],[-40,0],[40,0],[0,40],[-45,35],[45,-38],[-45,-40]];ring.forEach(([x,z],i)=>B.house(x,z,10,9,{floors:2,mat:i%2?C.stone:C.plaster,rot:Math.abs(x)>Math.abs(z)?(x<0?Math.PI/2:-Math.PI/2):(z<0?0:Math.PI),ruined:i%4===1}));
+    B.church(-30,-60);B.bx(3,.3,1.6,cmat().stone,-30,12.4,-66.2);B.foxhole(0,0);B.sandbags(-8,8,7);B.sandbags(8,-8,7);B.truck(10,10,.8);B.crates(30,-32,4);B.barrel(-4,4,true);B.barrel(12,-4,true);B.tank(-12,-14,1.1);for(const [x,z] of [[-10,0],[10,0],[0,-12],[0,12]])B.lamp(x*1.6,z*1.6,false);B.forest(30,-120,-120,120,-80,'snowpine');},
+  objectives:[
+    {type:'defend',text:'Defend the town square',pos:[0,0],waves:[{n:6,from:[[0,-80],[-80,0]]},{n:7,from:[[80,0],[0,80]],smg:true}],lines:[['SGT. MILLER','They have us surrounded, the poor bastards.','m8_1',3]]},
+    {type:'pickup',text:'Recover the supply drop',pos:[30,-30],label:'take the supplies',refill:true,checkpoint:true,lines:[['LT. HAYES (radio)','Supply drop is down near the east road. Get those crates!','h8_1',3.4]]},
+    {type:'clear',text:'Take out the sniper in the church tower',spawn:[{g:'c1',at:[[-30,-51],[-35,-62],[-25,-62]]},{g:'c1',at:[[-30,-66.2]],y:12.7,hp:120,wid:'kar98k'}],checkpoint:true,lines:[['PVT. RUIZ','Sniper! The church tower!','r8_1',2.2]]},
+    {type:'defend',text:'Hold Bastogne',pos:[0,0],checkpoint:true,waves:[{n:8,from:[[-80,-60],[80,-60]]},{n:9,from:[[0,-90],[-90,20],[90,20]],smg:true},{n:10,from:[[-60,80],[60,80],[0,-90]]}]}
+  ],
+  outro:[['SGT. MILLER','They asked the General to surrender. He sent back one word. Nuts.','m8_2',4],['KANE','Patton is coming. We hold a little longer.','k8_1',2.8]]};
+
+LEVELS[9]={title:'BRIDGE AT REMAGEN',op:'CROSSING THE RHINE',place:'Ludendorff Bridge, Remagen',date:'March 7, 1945 — 15:50',env:'day',grass:9000,artillery:true,
+  brief:['The Germans have blown every bridge over the Rhine — except one. The Ludendorff railway bridge at Remagen still stands.','It is wired for demolition and the detonators could fire at any moment.','Rush the bridge, cut the wires, and clear the tunnel on the east bank. Intelligence says Kessler crossed here.'],
+  H:riverH,col:riverCol,start:[0,85,0],
+  build(B){const C=cmat();B.water(-.4,-160,-30,160,30);B.bridge(0,32,-32,9,3);B.rails(0,30,-30);for(const [x,z] of [[-24,48],[24,50],[-36,66]])B.house(x,z,9,8,{mat:C.stone,rot:Math.PI/2,ruined:true});
+    for(let i=0;i<12;i++)B.rock(rnd(-100,100)+(Math.random()<.5?0:0),-rnd(70,110),rnd(5,10));B.bx(14,8,4,C.stone,0,H(0,-58)+4,-60);B.bx(6,5,2,cmat().dark,0,H(0,-58)+2.5,-57.9,0,false);B.sandbags(-6,-42,7);B.sandbags(6,-44,7);B.tank(14,58,-.3);B.truck(-12,56,.4);B.forest(10,-120,90,120,110,'oak');},
+  objectives:[
+    {type:'clear',text:'Clear the west bank',spawn:[{g:'r1',at:[[-20,44],[22,46],[0,38],[-8,55],[30,60]]}],lines:[['LT. HAYES (radio)','It is still standing. Take it before they blow it!','h9_1',3]]},
+    {type:'reach',text:'Rush the bridge',pos:[0,30],r:5},
+    {type:'interact',text:'Cut the demolition wires',targets:[[-3,16],[3,0],[-3,-16]],hold:1.6,timeLimit:90,checkpoint:true,label:'cut the wire',spawn:[{g:'r2',at:[[-4,-36],[4,-38],[0,-48]]}],lines:[['KANE','Wires! Cut every wire you see!','k9_1',2.4]]},
+    {type:'clear',text:'Clear the railway tunnel',checkpoint:true,spawn:[{g:'r3',at:[[-6,-46],[6,-48],[0,-54],[-3,-56],[3,-55]],trench:true}]}
+  ],
+  outro:[['LT. HAYES (radio)','We have a bridge across the Rhine. And Kane — Kessler\'s convoy went south. Into the Alps.','h9_2',4.6],['KANE','Nightjar is with him.','k9_2',2]]};
+
+const BASE_MAP=`
+##########################
+#L....#......L......#...L#
+#.....#.............#....#
+#.....D......####...D....#
+#.....#......#..#...#....#
+###D###......#L.#...###D##
+#L............D..........#
+#........###.........L...#
+#........#L#.............#
+####D#####.#####D#########
+#L.....................L.#
+#........................#
+###########..#############`;
+LEVELS[10]={title:'GÖTTERDÄMMERUNG',op:'TWILIGHT OF THE GODS',place:'Alpine fortress, Bavaria',date:'April 29, 1945 — 04:20',env:'snowNight',weather:'snow',grass:0,artillery:false,final:true,
+  brief:['The war is almost over. Kessler is not finished.','His Alpine fortress holds the last of the Götterdämmerung material — and Nightjar.','Breach the gate, find her, and end this.'],
+  H:(x,z)=>{const r=z<-48?Math.min(40,(-48-z)*3):0;const s=Math.abs(x)>60?Math.min(30,(Math.abs(x)-60)*2):0;return Math.max(r*(Math.abs(x)<52?0:1),s)+(z>-48?nz(x,z,.4):0);},col:(x,z,y)=>y>2?0x8a8d92:0xdfe4ea,snow:true,start:[0,80,0],
+  build(B){const C=cmat();B.forest(60,-120,10,120,120,'snowpine',(x,z)=>Math.abs(x)<10||Math.hypot(x,z-80)<10);for(let i=0;i<30;i++)B.rock(rnd(-120,120),-rnd(50,120),rnd(6,14));
+    for(const s of[-1,1])B.bx(40,30,6,C.rock,s*32,15,-50);B.bx(24,26,6,C.rock,0,17,-50);
+    B.sandbags(-8,-38,7);B.sandbags(8,-38,7);B.wire(-16,-32);B.wire(16,-32);B.truck(-14,-20,.2);B.truck(12,-14,-.4);B.lamp(-6,-44);B.lamp(6,-44);B.crates(18,-30,4);
+    B.gridRooms(BASE_MAP,-52,-100,4,4,C.concrete);LV.cell=[-52+14*4+2,-100+3*4+2];},
+  objectives:[
+    {type:'clear',text:'Breach the fortress gate',spawn:[{g:'g1',at:[[-8,-40],[8,-40],[-14,-24],[12,-18],[0,-44],[-18,-34]],trench:true}],lines:[['LT. HAYES (radio)','This is it, Kane. End it.','h10_1',2.2]]},
+    {type:'reach',text:'Infiltrate the fortress',pos:[-4,-50],r:4,checkpoint:true},
+    {type:'clear',text:'Fight through the lower corridors',spawn:[{g:'g2',at:[[-40,-60],[-20,-60],[10,-58],[30,-60],[-30,-72],[20,-70]]}]},
+    {type:'interact',text:'Free Nightjar',targets:[[6,-82]],hold:2.5,label:'break the cell lock',checkpoint:true,spawn:[{g:'g3',at:[[-30,-88],[-40,-80],[10,-92]]}]},
+    {type:'talk',lines:[['NIGHTJAR','Kane! You came.','n10_1',2],['KANE','Told you I would. Can you walk?','k10_1',2.6],['NIGHTJAR','I can shoot. Give me a gun. Kessler is in the command room.','n10_2',3.6]]},
+    {type:'boss',text:'Defeat Oberst Kessler',spawnAt:[-42,-96],hp:1600,guards:[[-36,-90],[-46,-90],[-30,-94]],lines:[['OBERST KESSLER','You are too late, Sergeant. The fire has already been lit.','x10_1',4]]},
+    {type:'choice',text:'Kessler is escaping to his plane — but the prisoners below will die if the fortress is destroyed.',options:[['SAVE THE PRISONERS','save'],['CHASE KESSLER','chase']]}
+  ],
+  outro:[]};
+LEVELS[10].endings={
+  save:[['KANE','Get them out. All of them.','k10_2',2.4],['NIGHTJAR','You let him go, for strangers.','n10_3',3],['KANE','They are not strangers. They are why we came.','k10_3',3],['LT. HAYES (radio)','Kessler\'s plane is gone. But every prisoner is alive. The war is over, Kane. Come home.','h10_2',5]],
+  chase:[['KANE','Nightjar, get the prisoners out! I am going after him!','k10_4',3],['OBERST KESSLER','You cannot stop the twilight, Sergeant!','x10_2',3],['KANE','Watch me.','k10_5',1.4],['LT. HAYES (radio)','Kessler is dead. The fortress is coming down. Kane... we lost some of the prisoners.','h10_3',5]]};
+LEVELS[1]={title:'DAWN AT OMAHA',place:'Omaha Beach, Normandy',date:'June 6, 1944'};
+
+// ---------- world switching ----------
+function captureM1(){const glob=new Set([camera,sky,CLOUDS,hemi,sun,sun.target,flashLight,muzzleLight,FLARE,grass,...PART.pool,...TRC.pool,...HOLES.map(h=>h),...SHELLS.map(s=>s.m)]);
+  const dyn=new Set([...enemies.map(e=>e.g),...allies.map(a=>a.g),...nades.map(n=>n.m)]);if(pModel)dyn.add(pModel.g);
+  M1W={objs:scene.children.filter(o=>!glob.has(o)&&!dyn.has(o)&&!(o.isPoints)),statics:statics.slice(),colliders:colliders.slice(),emitters:emitters.slice()};}
+function disposeLevel(){if(!LV)return;scene.remove(LV.root);LV=null;}
+function switchWorld(n){if(n===CUR&&(n===1?!LV:LV))return;
+  if(n===1){disposeLevel();setWeather(null);if(M1W){M1W.objs.forEach(o=>o.visible=o.userData._vis!==false);statics.length=0;statics.push(...M1W.statics);colliders.length=0;colliders.push(...M1W.colliders);emitters.length=0;emitters.push(...M1W.emitters);}
+    HF=null;CUR=1;applyEnv('dawn');buildGrass(QUAL[S.quality].grass);rebuildHit();return;}
+  if(CUR===1&&!LV){if(!M1W)captureM1();M1W.objs.forEach(o=>{o.userData._vis=o.visible;o.visible=false;});}
+  disposeLevel();const def=LEVELS[n];CUR=n;HF=def.H;
+  const root=new THREE.Group();scene.add(root);const st=[],co=[];LV={def,root,statics:st,colliders:co,emit:[],lights:[],oi:-1};
+  const terr=terrainMesh(def.H,def.col);if(def.ground==='cobble'){terr.material=cmat().cobble;}else if(def.snow){terr.material=new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.92,map:TX.sand,normalMap:MAT.sand.normalMap});}
+  root.add(terr);const B=makeBuilder(root,st,co);def.build(B);
+  statics.length=0;statics.push(...st);colliders.length=0;colliders.push(...co);emitters.length=0;emitters.push(...LV.emit);
+  applyEnv(def.env);setWeather(def.weather||null);buildGrass(def.grass?Math.min(def.grass,QUAL[S.quality].grass*1.5|0):0);if(grass&&def.snow)grass.visible=false;rebuildHit();}
+
+// ---------- mission runtime ----------
+function lvObj(){return LV&&LV.def.objectives[LV.oi];}
+function spawnGroup(sp){for(const s of sp||[])for(const [x,z] of s.at){const e=spawnEnemy(x+(s.y?0:rnd(-.5,.5)),z+(s.y?0:rnd(-.5,.5)),s.type||'rifle',{group:s.g,trench:!!s.trench,wid:s.wid||(s.smg?(Math.random()<.6?'mp40':'stg44'):undefined),hp:s.hp,counts:false,target:s.target?new V3(s.target[0]+rnd(-6,6),0,s.target[1]+rnd(-6,6)):null});if(s.y){e.pos.y=s.y;e.perch=true;}}}
+function sayLines(lines){for(const l of lines||[])sayV(l[0],l[1],l[3]||Math.max(2.2,l[1].length/14),l[2]);}
+function startLevelObjective(i){LV.oi=i;const o=lvObj();if(!o){levelComplete();return;}o.st={t:0,done:false,wave:-1,planted:[],cut:[],timer:o.timeLimit||0,spawned:0,spT:0};
+  if(o.checkpoint)LV.cp={pos:pl.pos.clone(),yaw:pl.yaw,oi:i};
+  spawnGroup(o.spawn);sayLines(o.lines);if(o.allies)o.allies.forEach(([x,z])=>spawnAlly(x,z,x+rnd(-3,3),z+rnd(-3,3)));
+  if(o.type==='talk'){o.st.dur=(o.lines||[]).reduce((a,l)=>a+(l[3]||Math.max(2.2,l[1].length/14)),0)+.5;}
+  if(o.type==='pickup'){o.st.item=LV.root.children.includes(o._item)?o._item:(o._item=makeBuilder(LV.root,[],[]).item(o.pos[0],o.pos[1]));}
+  if(o.type==='boss'){const b=spawnEnemy(o.spawnAt[0],o.spawnAt[1],'rifle',{group:'boss',hp:o.hp,wid:'mp40',boss:true,name:'OBERST KESSLER',counts:false});b.maxhp=b.hp;LV.boss=b;spawnGroup([{g:'boss',at:o.guards,smg:true}]);}
+  if(o.type==='choice'){showChoice(o);}
+  if(o.type==='defend'||o.type==='survive'){o.st.wave=-1;o.st.gap=2;}
+  if(o.text)setObj(o.text+progressText(o));if(o.timeLimit){$('timer').style.display='block';}
+  if(i>0&&o.checkpoint)xp('CHECKPOINT');}
+function progressText(o){if(o.type==='clear'){const a=enemies.filter(e=>e.group===o.spawn[0].g);const alive=a.filter(e=>e.alive).length;return ` <b>(${a.length-alive}/${a.length})</b>`;}
+  if(o.type==='plant')return ` <b>(${o.st?o.st.planted.length:0}/${o.targets.length})</b>`;if(o.type==='interact')return o.targets.length>1?` <b>(${o.st?o.st.cut.length:0}/${o.targets.length})</b>`:'';
+  if(o.type==='defend')return o.st&&o.st.wave>=0?` <b>(wave ${Math.min(o.st.wave+1,o.waves.length)}/${o.waves.length})</b>`:'';return '';}
+function lvTarget(){const o=lvObj();if(!o||!o.st)return null;const P=(x,z,dy=1.2)=>new V3(x,groundAt(x,z)+dy,z);
+  switch(o.type){case 'reach':case 'pickup':case 'defend':case 'survive':return o.pos?P(o.pos[0],o.pos[1]):null;
+    case 'clear':{const e=enemies.find(e=>e.alive&&e.group===o.spawn[0].g);return e?e.pos.clone().add(new V3(0,2,0)):null;}
+    case 'plant':{const t=o.targets.find((t,i)=>!o.st.planted.includes(i));return t?P(t[0],t[1]):null;}
+    case 'interact':{const t=o.targets.find((t,i)=>!o.st.cut.includes(i));return t?P(t[0],t[1]):null;}
+    case 'boss':return LV.boss&&LV.boss.alive?LV.boss.pos.clone().add(new V3(0,2.2,0)):null;}return null;}
+function holdPrompt(near,label,need,dt,key){const holding=keys['KeyE']||tState.act;$('prompt').style.display=near?'block':'none';$('tAct').style.display=near&&isTouch?'flex':'none';
+  $('ptxt').innerHTML=(isTouch?'Hold <kbd>HOLD</kbd> to ':'Hold <kbd>E</kbd> to ')+label;if(near&&holding){pl.plant+=dt;if(Math.floor(pl.plant*4)!==Math.floor((pl.plant-dt)*4))SND.beep();}else pl.plant=Math.max(0,pl.plant-dt*2);
+  $('pbar').firstChild.style.width=(pl.plant/need*100)+'%';if(pl.plant>=need){pl.plant=0;$('prompt').style.display='none';$('tAct').style.display='none';return true;}return false;}
+function updLevel(dt){const def=LV.def;
+  if(def.artillery){mission.art-=dt;if(mission.art<=0){mission.art=rnd(4,9);let p;for(let k=0;k<8;k++){p=new V3(pl.pos.x+rnd(-45,45),0,pl.pos.z+rnd(-45,45));if(p.distanceTo(pl.pos)>14)break;}p.y=H(p.x,p.z);if(def.treeBursts&&Math.random()<.5)p.y+=rnd(8,12);artQ.push({p,t:1.1,big:Math.random()<.3});SND.whistle(p.distanceTo(pl.pos));}}
+  for(let i=artQ.length-1;i>=0;i--){const a=artQ[i];a.t-=dt;if(a.t<=0){explode(a.p,a.big,null);if(a.p.y-H(a.p.x,a.p.z)>4&&a.p.distanceTo(pl.pos)<9)hurt(25,a.p,true);artQ.splice(i,1);}}
+  mission.amb=(mission.amb||0)-dt;if(mission.amb<=0){mission.amb=rnd(1,3.5);const d=rnd(150,320);if(Math.random()<.5){const n=(rnd(4,10))|0;for(let k=0;k<n;k++)setTimeout(()=>SND.mg(d),k*rnd(70,95));}else SND.eRifle(d);}
+  if(LV.water){const p=LV.water.geometry.attributes.position;}
+  if(state!=='play')return;const o=lvObj();if(!o||!o.st||o.st.done)return;o.st.t+=dt;const dist=(x,z)=>Math.hypot(pl.pos.x-x,pl.pos.z-z);
+  if(o.timeLimit){o.st.timer-=dt;$('timer').style.display='block';$('timer').textContent=Math.max(0,o.st.timer).toFixed(0)+'s';if(o.st.timer<=0){$('timer').style.display='none';missionFailed('Time ran out.');return;}}
+  let done=false;
+  switch(o.type){
+    case 'reach':done=dist(o.pos[0],o.pos[1])<(o.r||5);break;
+    case 'talk':done=o.st.t>=o.st.dur;break;
+    case 'clear':{const a=enemies.filter(e=>e.group===o.spawn[0].g);done=a.length>0&&a.every(e=>!e.alive);setObjQuiet(o);break;}
+    case 'plant':{let near=-1;o.targets.forEach((t,i)=>{if(!o.st.planted.includes(i)&&dist(t[0],t[1])<3.2)near=i;});
+      if(holdPrompt(near>=0,'plant explosive charge',2.5,dt)){o.st.planted.push(near);SND.beep();say('KANE','Charge set!',1.6);const t=o.targets[near];setTimeout(()=>{const p=new V3(t[0],H(t[0],t[1])+1,t[1]);explode(p,true,'player');if(dist(t[0],t[1])<8)hurt(150*(1-dist(t[0],t[1])/8),p,true);LV.emit.push({pos:p.clone(),type:'bsmoke',rate:.25,t:0,ttl:1e9});emitters.push(LV.emit[LV.emit.length-1]);stats.score+=250;xp('+250 TARGET DESTROYED');},(o.fuse||4)*1000);setObjQuiet(o);}
+      done=o.st.planted.length>=o.targets.length&&o.st.t>(o.st.lastT||0);if(o.st.planted.length>=o.targets.length&&!o.st.lastT)o.st.lastT=o.st.t+(o.fuse||4)+.5;break;}
+    case 'interact':{let near=-1;o.targets.forEach((t,i)=>{if(!o.st.cut.includes(i)&&dist(t[0],t[1])<2.8)near=i;});
+      if(holdPrompt(near>=0,o.label||'interact',o.hold||2,dt)){o.st.cut.push(near);SND.click();xp('+100');stats.score+=100;setObjQuiet(o);}done=o.st.cut.length>=o.targets.length;break;}
+    case 'pickup':{const near=dist(o.pos[0],o.pos[1])<2.4;if(o.st.item)o.st.item.rotation.y+=dt;if(holdPrompt(near,o.label||'pick up',.8,dt)){if(o.st.item)o.st.item.visible=false;xp(o.refill?'AMMO RESUPPLIED':'DOCUMENTS RECOVERED');if(o.refill){pl.ws.forEach((ws,i)=>ws.res=pl.wdef[i].res);pl.nades=4;pl.hp=100;}done=true;}break;}
+    case 'defend':case 'survive':{const alive=enemies.filter(e=>e.alive&&e.group==='w').length;
+      if(o.type==='defend'){if(alive===0){o.st.gap-=dt;if(o.st.gap<=0){o.st.wave++;if(o.st.wave>=o.waves.length){done=true;break;}const w=o.waves[o.st.wave];for(let k=0;k<w.n;k++){const f=w.from[k%w.from.length];spawnEnemy(f[0]+rnd(-6,6),f[1]+rnd(-4,4),'rifle',{group:'w',counts:false,wid:w.smg&&Math.random()<.6?(Math.random()<.5?'mp40':'stg44'):undefined,target:new V3(o.pos[0]+rnd(-14,14),0,o.pos[1]+rnd(-14,14))});}
+          if(o.st.wave>0)xp('WAVE '+(o.st.wave+1));o.st.gap=4;setObjQuiet(o);}}}
+      else{o.st.spT-=dt;if(o.st.spT<=0&&alive<o.max){o.st.spT=o.every;const f=o.from[(Math.random()*o.from.length)|0];spawnEnemy(f[0]+rnd(-4,4),f[1]+rnd(-4,4),'rifle',{group:'w',counts:false,target:new V3(o.pos[0]+rnd(-12,12),0,o.pos[1]+rnd(-12,12))});}
+        const left=Math.max(0,o.time-o.st.t);$('timer').style.display='block';$('timer').textContent=left.toFixed(0)+'s';if(left<=0){$('timer').style.display='none';done=true;}}break;}
+    case 'boss':{const b=LV.boss;$('bossbar').style.display=b&&b.alive?'block':'none';if(b){$('bossbar').firstElementChild.lastChild.style.width=(Math.max(0,b.hp)/b.maxhp*100)+'%';if(b.alive&&b.hp<b.maxhp*.25&&!o.st.fled){o.st.fled=true;b.alive=false;b.g.visible=false;rebuildHit();say('OBERST KESSLER','This is not over, Sergeant!',2.6);done=true;}}break;}
+    case 'choice':done=!!o.st.pick;break;}
+  if(done){o.st.done=true;$('prompt').style.display='none';$('tAct').style.display='none';if(o.type==='boss')$('bossbar').style.display='none';if(o.timeLimit)$('timer').style.display='none';
+    if(o.type==='defend'||o.type==='survive'){$('timer').style.display='none';for(const e of enemies)if(e.alive&&e.group==='w'&&e.pos.distanceTo(pl.pos)>40){e.alive=false;e.g.visible=false;}rebuildHit();}
+    setTimeout(()=>{if(LV&&LV.oi===LV.def.objectives.indexOf(o)&&(state==='play'))startLevelObjective(LV.oi+1);},o.type==='talk'?100:900);}}
+function setObjQuiet(o){$('obj').innerHTML=`<div class="h">OBJECTIVE</div>${o.text}${progressText(o)}`;$('pobj').textContent='Objective: '+o.text;}
+function showChoice(o){const el=$('choice');el.querySelector('p').textContent=o.text;el.querySelector('.btns').innerHTML=o.options.map(([t,v])=>`<button class="btn" data-choice="${v}">${t}</button>`).join('');exitLock();show('choice');state='pause';
+  el.onclick=e=>{const b=e.target.closest('[data-choice]');if(!b)return;o.st.pick=b.dataset.choice;LV.ending=o.st.pick;hideAll();state='play';document.body.classList.add('play');if(!isTouch)reqLock();};}
+function levelIntroCine(def){const s=new V3(def.start[0],0,def.start[1]);s.y=H(s.x,s.z);const a=s.clone().add(new V3(-30,18,30)),b=s.clone().add(new V3(10,6,12)),look=s.clone().add(new V3(0,1,-40));
+  return[{dur:6,start:()=>{camera.fov=50;camera.updateProjectionMatrix();levelTitleCard(def);},cam:k=>({p:lp(a,b,ease(k)),l:lp(look.clone().add(new V3(0,10,0)),look,k)}),end:()=>{$('title').style.opacity=0;}},
+    {dur:Math.max(3,(def.introLines||[]).length*3),cam:k=>({p:lp(b,s.clone().add(new V3(1.5,2.2,3)),ease(k)),l:look}),subs:(def.introLines||[]).map((l,i)=>[.3+i*3,l[0],l[1],2.9])}];}
+function levelTitleCard(def){const L=[def.op,def.title,'Sgt. Elias Kane — 2nd Ranger Battalion',def.date,def.place];const t=$('title');t.innerHTML=L.map((s,i)=>`<div class="l${i===1?' big':''}"></div>`).join('');t.style.opacity=1;const ls=[...t.children];let li=0,ci=0;
+  const tick=()=>{if(!cine||li>=ls.length)return;ls[li].textContent=L[li].slice(0,++ci);if(ci%2)SND.click();if(ci>=L[li].length){li++;ci=0;}setTimeout(tick,38);};setTimeout(tick,400);}
+function levelOutroCine(def,lines){const c=pl.pos.clone();return[{dur:Math.max(5,lines.reduce((a,l)=>a+(l[3]||Math.max(2.2,l[1].length/14)),0)+1),start:()=>{camera.fov=50;camera.updateProjectionMatrix();stats.endT=time;},
+  cam:k=>{const a=.3+k*.8;return{p:new V3(c.x+Math.sin(a)*9,c.y+3.5+k*2,c.z+Math.cos(a)*9),l:c.clone().add(new V3(0,1.4,0))};},subs:lines.reduce((acc,l)=>{const t=acc.t;acc.list.push([t,l[0],l[1],(l[3]||Math.max(2.2,l[1].length/14))]);acc.t+=(l[3]||Math.max(2.2,l[1].length/14));return acc;},{t:.4,list:[]}).list}];}
+function startLevel(n){hideAll();switchWorld(n);clearDynamic();const def=LEVELS[n];mission.phase='level';mission.art=4;
+  stats.shots=stats.hits=stats.kills=stats.heads=stats.score=0;pl.deaths=0;LV.cp=null;
+  playCine(levelIntroCine(def),()=>{resetPlayer(new V3(def.start[0],0,def.start[1]),def.start[2]||0);stats.start=time;LV.cp={pos:pl.pos.clone(),yaw:pl.yaw,oi:0};
+    for(let i=0;i<4;i++)spawnAlly(def.start[0]+rnd(-6,6),def.start[1]+rnd(2,6),def.start[0]+rnd(-10,10),def.start[1]-rnd(8,16),i*.4);
+    startLevelObjective(0);enterPlay();});}
+function levelComplete(){const def=LV.def;let lines=def.outro;if(def.endings)lines=def.endings[LV.ending||'save'];
+  playCine(levelOutroCine(def,lines),()=>{if(def.final){showCredits();}else missionComplete();});}
+function levelRestart(){hideAll();const cp=LV.cp||{pos:new V3(LV.def.start[0],0,LV.def.start[1]),yaw:0,oi:0};
+  for(const e of enemies){if(e.alive){e.alive=false;e.g.visible=false;}}rebuildHit();for(const n of nades)scene.remove(n.m);nades.length=0;
+  resetPlayer(cp.pos,cp.yaw);pl.alive=true;$('timer').style.display='none';$('bossbar').style.display='none';startLevelObjective(cp.oi);enterPlay();}
+function missionFailed(msg){pl.alive=false;state='dead';exitLock();document.body.classList.remove('play');$('dead').querySelector('h1').textContent='MISSION FAILED';$('deadq').textContent=msg;setTimeout(()=>show('dead'),600);}
+function showCredits(){state='complete';document.body.classList.remove('play','cine');exitLock();PROGRESS.done[10]=1;saveProgress();show('credits');const r=$('credroll');r.style.animation='none';void r.offsetWidth;r.style.animation='';}
+// voiced subtitles: plays audio/<id>.mp3 when present
+const VOICE={};function sayV(who,text,dur,id){say(who,text,dur);if(!id||!A.ctx)return;const url=BASE+'audio/'+id+'.mp3';
+  const play=buf=>{if(!buf)return;const s=A.ctx.createBufferSource();s.buffer=buf;const g=A.ctx.createGain();g.gain.value=1.4;s.connect(g);g.connect(A.sfx);s.start(A.ctx.currentTime+.05);};
+  if(VOICE[id]!==undefined){VOICE[id].then(play);return;}VOICE[id]=fetch(url).then(r=>r.ok?r.arrayBuffer():null).then(b=>b?A.ctx.decodeAudioData(b):null).catch(()=>null);VOICE[id].then(play);}
+
 /* ================= LOOP ================= */
 const gctx=$('grain').getContext('2d');const gimg=gctx.createImageData(320,180);let gT=0;
 function updGrain(dt){if(!S.grain)return;gT-=dt;if(gT>0)return;gT=.05;const d=gimg.data;for(let i=0;i<d.length;i+=4){const v=Math.random()*255;d[i]=d[i+1]=d[i+2]=v;d[i+3]=255;}gctx.putImageData(gimg,0,0);}
@@ -936,10 +1320,10 @@ function loop(now){requestAnimationFrame(loop);let dt=Math.min(.05,(now-last)/10
   flashLight.intensity*=Math.exp(-dt*9);
   const fp=state==='play'?pl.pos:camera.position;sun.target.position.set(fp.x,0,fp.z-10);sun.position.set(fp.x+SUN_DIR.x*150,SUN_DIR.y*150,fp.z+SUN_DIR.z*150);
   CLOUDS.position.set(camera.position.x,0,camera.position.z);CLOUDS.rotation.y+=dt*.002;
-  updShells(dt);if(FLARE){FLARE.position.copy(camera.position).addScaledVector(SUN_DIR,900);}
+  updShells(dt);updWeather(dt);if(FLARE){FLARE.position.copy(camera.position).addScaledVector(SUN_DIR,900);}
   updLoadoutPreview(dt);updGrain(dt);if(water2)water2.material.uniforms.time.value+=dt*.6;
   if(composer){composer.render();if(FLARE)renderer.render(flareScene,camera);}else{renderer.clear();renderer.render(scene,camera);}if(state==='play')solveArms();else if(ARMS)ARMS.wrap.visible=false;
   if(VM.visible&&state==='play'){renderer.clearDepth();vmCam.fov=lerp(52,40,pl.ads);vmCam.updateProjectionMatrix();renderer.render(vmScene,vmCam);}}
-applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
+renderMissions();applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
 Promise.all([loadProps(),loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';})]).then(()=>setTimeout(()=>show('menu'),300));
-window.__game={WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
+window.__game={get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};

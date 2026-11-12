@@ -75,6 +75,11 @@ body.play #hud{display:block}
 #tCam{width:40px;height:40px;right:58px;top:8px;border-radius:6px;font-size:10px}
 #tPick{width:76px;height:44px;border-radius:8px;left:50%;margin-left:-38px;bottom:38%;display:none;border-color:#e9c46a}
 #fps{position:absolute;right:8px;bottom:4px;font-size:11px;color:#9f9;display:none}
+#bossbar{position:absolute;top:56px;left:50%;transform:translateX(-50%);width:min(420px,60vw);display:none;text-align:center;font-size:13px;letter-spacing:3px;color:#e9c46a;text-shadow:0 1px 3px #000}
+#bossbar div{position:relative;height:22px}#bossbar span{position:relative;z-index:1}#bossbar i{position:absolute;left:0;bottom:0;height:5px;width:100%;background:#c0503a;box-shadow:0 0 6px #000}
+#credroll{position:absolute;left:0;right:0;top:100%;text-align:center;font-family:"Special Elite";color:#d8cfb4;font-size:18px;line-height:1.9;animation:roll 40s linear forwards}
+#credroll h1{font-family:Oswald;font-size:56px;letter-spacing:10px;color:#efe6cc}#credroll h2{font-family:Oswald;letter-spacing:6px;color:#c0503a}
+@keyframes roll{to{transform:translateY(-200vh)}}
 #timer{position:absolute;left:50%;top:50px;transform:translateX(-50%);font-size:28px;color:#ff6b4a;font-weight:700;display:none;text-shadow:0 2px 4px #000}
 /* menus */
 .scr{position:fixed;inset:0;z-index:40;display:none;flex-direction:column;justify-content:center;align-items:center}
@@ -213,6 +218,7 @@ body.touch #tPause{top:8px;right:10px}
   <div id="prompt"><span id="ptxt"></span><div id="pbar"><i></i></div></div>
   <div id="reloadTxt">RELOADING</div>
   <div id="timer"></div>
+  <div id="bossbar"><div><span>OBERST KESSLER</span><i></i></div></div>
   <div id="ammo"><div id="wname"></div><div id="mag"></div><div id="nades"></div></div>
   <div id="fps"></div>
   <div id="pick"></div>
@@ -252,7 +258,7 @@ body.touch #tPause{top:8px;right:10px}
 
 <div class="scr" id="missions"><div class="dossier">
   <div class="stamp">TOP SECRET</div>
-  <h3>CAMPAIGN — OPERATION OVERLORD</h3>
+  <h3>CAMPAIGN — IRON REQUIEM</h3>
   <div id="mislist"></div>
   <div class="btns"><button class="btn g" data-a="back">Back</button></div>
 </div></div>
@@ -277,6 +283,8 @@ body.touch #tPause{top:8px;right:10px}
     <div class="locol" id="loList"></div>
     <div class="locol" id="loSmith"></div>
   </div></div></div>
+<div class="scr" id="choice" style="background:rgba(0,0,0,.75)"><div class="panel" style="width:min(560px,92vw);text-align:center"><h2>DECISION</h2><p style="font-family:'Special Elite';color:#d8cfb4;margin:10px 0 18px;line-height:1.6"></p><div class="btns" style="justify-content:center"></div></div></div>
+<div class="scr" id="credits" style="background:#000;overflow:hidden"><div id="credroll"><h1>IRON REQUIEM</h1><p>A World War II story in ten missions</p><br><p><b>Sgt. Elias Kane</b> — 2nd Ranger Battalion</p><p><b>Nightjar</b> — French Resistance</p><p><b>Lt. Hayes · Sgt. Miller · Pvt. Ruiz</b></p><p><b>Oberst Wolfram Kessler</b></p><br><p>Omaha · Saint-Lô · Paris · Falaise · Nijmegen</p><p>Hürtgen · Ardennes · Bastogne · Remagen · Bavaria</p><br><p>In memory of everyone who never came home.</p><br><h2>THANK YOU FOR PLAYING</h2></div><button class="btn" data-a="credBack" style="position:fixed;bottom:20px;right:20px">Main Menu</button></div>
 <div class="scr" id="settings"><div class="panel">
   <h2>SETTINGS</h2>
   <div class="tabs" id="stabs"></div>
@@ -319,8 +327,8 @@ body.touch #tPause{top:8px;right:10px}
   <h1>MISSION COMPLETE</h1>
   <div style="font-family:'Special Elite';color:#cfc6a8">Dawn at Omaha</div>
   <div class="stats" id="stats"></div>
-  <div style="font-size:14px;color:#aaa;font-family:'Special Elite'">NEXT: Mission 2 — Hedgerow Hell <i>(in development)</i></div>
-  <div class="btns" style="justify-content:center"><button class="btn" data-a="replay">Replay</button><button class="btn g" data-a="quit">Main Menu</button></div>
+  <div style="font-size:14px;color:#aaa;font-family:'Special Elite'" id="nextTxt"></div>
+  <div class="btns" style="justify-content:center"><button class="btn" id="nextBtn" data-a="next">Next Mission ▸</button><button class="btn g" data-a="replay">Replay</button><button class="btn g" data-a="quit">Main Menu</button></div>
 </div></div>
 
 <script type="module" src="/src/main.js"></script>
