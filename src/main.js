@@ -15,6 +15,7 @@ import {Lensflare,LensflareElement} from 'three/addons/objects/Lensflare.js';
 import '@fontsource/oswald/300.css';import '@fontsource/oswald/400.css';import '@fontsource/oswald/600.css';import '@fontsource/oswald/700.css';import '@fontsource/special-elite/400.css';
 const BASE=import.meta.env.BASE_URL;
 import * as AS from './assets.js';
+import {makeDetailTexture,makeGroundMaterial} from './ground.js';
 import {Haptics} from '@capacitor/haptics';
 import {WEAPONS,ATT,ATT_SLOTS,CLASS_NAMES,attAllowed,defaultAtt,effStats,statBars,buildGunVM} from './weapons.js';
 const $=id=>document.getElementById(id);
@@ -32,7 +33,7 @@ let S=Object.assign({},DEF);
 try{const s=JSON.parse(localStorage.getItem('ir_settings')||'null');if(s)Object.assign(S,s);}catch(e){}
 function saveS(){try{localStorage.setItem('ir_settings',JSON.stringify(S))}catch(e){}}
 const DIFF={recruit:{acc:.5,dmg:.55,hp:.8},regular:{acc:1,dmg:1,hp:1},hardened:{acc:1.4,dmg:1.4,hp:1.15},veteran:{acc:2,dmg:2.2,hp:1.3}};
-const QUAL={low:{pr:.6,sh:0,parts:120,fog:.0105,ocean:0,post:0,bloom:0,grass:0},medium:{pr:.85,sh:1024,parts:260,fog:.009,ocean:1,post:0,bloom:0,grass:4000},high:{pr:1,sh:2048,parts:450,fog:.008,ocean:1,post:1,bloom:1,grass:12000},ultra:{pr:Math.min(devicePixelRatio||1,2),sh:4096,parts:700,fog:.0072,ocean:1,post:1,bloom:1,grass:25000}};
+const QUAL={low:{pr:.6,sh:0,parts:120,fog:.0105,ocean:0,post:0,bloom:0,grass:1800},medium:{pr:.85,sh:2048,parts:260,fog:.009,ocean:1,post:0,bloom:0,grass:6000},high:{pr:1,sh:2048,parts:450,fog:.008,ocean:1,post:1,bloom:1,grass:12000},ultra:{pr:Math.min(devicePixelRatio||1,2),sh:4096,parts:700,fog:.0072,ocean:1,post:1,bloom:1,grass:25000}};
 
 /* ================= AUDIO ================= */
 const A={ctx:null};let musicDuck=1;
@@ -150,7 +151,7 @@ function resize(){renderer.setSize(innerWidth,innerHeight,false);try{if(composer
 addEventListener('resize',resize);
 
 /* ---- procedural textures ---- */
-function ctex(w,h,draw,rep){const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');draw(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep[0],rep[1]);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=4;return t;}
+function ctex(w,h,draw,rep){const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');draw(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep[0],rep[1]);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=16;return t;}
 function speck(x,w,h,n,cols,sz){for(let i=0;i<n;i++){x.fillStyle=cols[i%cols.length];x.globalAlpha=Math.random()*.5+.2;const s=Math.random()*sz+1;x.fillRect(Math.random()*w,Math.random()*h,s,s);}x.globalAlpha=1;}
 const TX={
   sand:ctex(256,256,(x,w,h)=>{x.fillStyle='#bdb3a0';x.fillRect(0,0,w,h);speck(x,w,h,7000,['#9f9582','#d6cdbb','#867c6a','#b0a690'],2);for(let i=0;i<30;i++){x.strokeStyle='rgba(120,110,90,.15)';x.lineWidth=2;x.beginPath();const y=Math.random()*h;x.moveTo(0,y);x.bezierCurveTo(w*.3,y+rnd(-10,10),w*.6,y+rnd(-10,10),w,y);x.stroke();}},[60,45]),
@@ -194,6 +195,7 @@ function beachH(x,z){
   h+=Math.sin(x*.7+z*.5)*.05+Math.sin(x*.21-z*.37)*.12*clamp((30-z)/20,0,1);
   return h;
 }
+const GDETAIL=makeDetailTexture(512),GROUND=makeGroundMaterial(GDETAIL,{anisotropy:16}),GROUND_SNOW=makeGroundMaterial(GDETAIL,{snow:true,anisotropy:16,roughness:.8});
 const terrain=(()=>{
   const g=new THREE.PlaneGeometry(340,260,170,130);g.rotateX(-Math.PI/2);g.translate(0,0,20);
   const p=g.attributes.position,col=new Float32Array(p.count*3);const c=new THREE.Color();
@@ -201,7 +203,7 @@ const terrain=(()=>{
     if(y<.25)c.setHex(0x6c6050);else if(z>-16)c.setHex(0xa8946e);else if(y<8.6)c.lerpColors(new THREE.Color(0x8f7d5a),new THREE.Color(0x5d5f3a),clamp((y-2)/7,0,1));else c.setHex(0x4e5a30);
     const n=.9+Math.random()*.15;col[i*3]=c.r*n;col[i*3+1]=c.g*n;col[i*3+2]=c.b*n;}
   g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();
-  const m=new THREE.Mesh(g,MAT.sand);m.receiveShadow=true;scene.add(m);return m;
+  const m=new THREE.Mesh(g,GROUND);m.receiveShadow=true;scene.add(m);return m;
 })();
 
 /* ================= WORLD ================= */
@@ -266,11 +268,34 @@ function buildWater2(){if(water2)return;const tex=new THREE.TextureLoader().load
   scene.environment=pm.fromScene(es,0,.1,2000).texture;Object.values(MAT).forEach(m=>m.envMapIntensity=.45);}
 // ---- grass on the bluff ----
 let grass=null;
-function buildGrass(n){if(grass){scene.remove(grass);grass=null;}if(!n)return;const g=new THREE.PlaneGeometry(.08,.55,1,2);g.translate(0,.27,0);const pa=g.attributes.position;for(let i=0;i<pa.count;i++){if(pa.getY(i)>.5)pa.setX(i,0);}
-  const m=new THREE.MeshStandardMaterial({color:0x5d6a36,side:THREE.DoubleSide,roughness:1});
-  grass=new THREE.InstancedMesh(g,m,n);const d=new THREE.Object3D();const c=new THREE.Color();let k=0;
-  while(k<n){const x=rnd(-90,90),z=rnd(-85,-16);const h=H(x,z);if(h<3&&Math.random()<.85)continue;if(LV&&LV.noGrass&&LV.noGrass.some(r=>x>r[0]&&x<r[1]&&z>r[2]&&z<r[3]))continue;d.position.set(x,h,z);d.rotation.set(rnd(-.25,.25),rnd(0,6.3),rnd(-.25,.25));d.scale.setScalar(rnd(.6,1.5));d.updateMatrix();grass.setMatrixAt(k,d.matrix);c.setHSL(rnd(.15,.2),rnd(.3,.45),rnd(.22,.38));grass.setColorAt(k,c);k++;}
-  grass.receiveShadow=true;scene.add(grass);}
+// ---- grass: tufts of tapered blades in a patch that follows the camera; root-to-tip shading, wind sway, distance fade ----
+const GRASS={c:new V3(1e9,0,1e9),R:30,n:0,t:{value:0}};
+function tuftGeo(){const blades=7,segs=3,pos=[],hg=[],nor=[],idx=[];let v=0;
+  for(let b=0;b<blades;b++){const a=b/blades*Math.PI*2+Math.random()*.6,lean=rnd(.1,.28),h=rnd(.26,.48),w=rnd(.018,.03),ox=Math.cos(a)*.06,oz=Math.sin(a)*.06,cx=Math.cos(a),cz=Math.sin(a),px=-cz,pz=cx;
+    for(let k=0;k<=segs;k++){const t=k/segs,ww=w*(1-t*.85),y=h*t,off=lean*t*t;for(const sd of[-1,1]){pos.push(ox+cx*off+px*ww*sd,y,oz+cz*off+pz*ww*sd);hg.push(t);nor.push(cx*.35,1,cz*.35);}}
+    for(let k=0;k<segs;k++){const a0=v+k*2;idx.push(a0,a0+1,a0+2,a0+1,a0+3,a0+2);}v+=(segs+1)*2;}
+  const g=new THREE.BufferGeometry();g.setAttribute('position',new THREE.Float32BufferAttribute(pos,3));g.setAttribute('normal',new THREE.Float32BufferAttribute(nor,3));g.setAttribute('hgt',new THREE.Float32BufferAttribute(hg,1));g.setIndex(idx);g.normalizeNormals();return g;}
+function grassOK(x,z){if(LV){if(LV.def.snow)return false;if(LV.noGrass&&LV.noGrass.some(r=>x>r[0]&&x<r[1]&&z>r[2]&&z<r[3]))return false;for(const c of LV.colliders)if(x>c.minx&&x<c.maxx&&z>c.minz&&z<c.maxz&&c.maxy-c.miny>.6)return false;
+    const y=H(x,z);if(LV.water&&y<LV.water.position.y+.15)return false;const hx=LV.def.col(x,z,y);const r=hx>>16&255,g=hx>>8&255,b=hx&255;return g>r*1.02&&g>b*1.15;}
+  return H(x,z)>=2.6||(z<-16&&z>-90&&Math.random()<.2);}
+function buildGrass(n){if(grass){scene.remove(grass);grass.geometry.dispose();grass=null;}if(!n)return;
+  const m=new THREE.MeshStandardMaterial({color:0xffffff,side:THREE.DoubleSide,roughness:.92});
+  m.onBeforeCompile=sh=>{sh.uniforms.uT=GRASS.t;sh.uniforms.uR={value:GRASS.R};
+    sh.vertexShader=sh.vertexShader.replace('#include <common>','#include <common>\nattribute float hgt;varying float vH;uniform float uT;uniform float uR;')
+     .replace('#include <begin_vertex>',`#include <begin_vertex>
+  vH=hgt;vec3 ip=vec3(instanceMatrix[3][0],instanceMatrix[3][1],instanceMatrix[3][2]);
+  float fd=1.-smoothstep(uR*.72,uR,distance(ip.xz,cameraPosition.xz));transformed*=fd;
+  float ph=uT*1.6+ip.x*.31+ip.z*.23;float sw=(sin(ph)*.6+sin(ph*2.3+1.7)*.25)*hgt*hgt;transformed.x+=sw*.09;transformed.z+=sw*.05;`);
+    sh.fragmentShader=sh.fragmentShader.replace('#include <common>','#include <common>\nvarying float vH;')
+     .replace('#include <color_fragment>','#include <color_fragment>\n diffuseColor.rgb*=mix(.25,1.0,vH);');};
+  grass=new THREE.InstancedMesh(tuftGeo(),m,n);grass.instanceMatrix.setUsage(THREE.DynamicDrawUsage);grass.frustumCulled=false;grass.receiveShadow=true;
+  GRASS.R=({medium:26,high:38,ultra:52})[S.quality]||28;GRASS.n=n;GRASS.c.set(1e9,0,1e9);scene.add(grass);placeGrass();}
+const _gd=new THREE.Object3D(),_gc=new THREE.Color();
+function placeGrass(){if(!grass)return;const c=camera.position,R=GRASS.R;GRASS.c.set(c.x,0,c.z);let k=0,t=0;const n=GRASS.n;
+  while(k<n&&t<n*3){t++;const x=c.x+rnd(-R,R),z=c.z+rnd(-R,R);if(!grassOK(x,z))continue;_gd.position.set(x,H(x,z)-.03,z);_gd.rotation.set(rnd(-.12,.12),rnd(0,6.3),rnd(-.12,.12));const sc=rnd(.65,1.15);_gd.scale.set(sc,sc*rnd(.8,1.3),sc);_gd.updateMatrix();grass.setMatrixAt(k,_gd.matrix);
+    _gc.setHSL(rnd(.17,.27),rnd(.38,.62),rnd(.12,.22));grass.setColorAt(k,_gc);k++;}
+  grass.count=k;grass.instanceMatrix.needsUpdate=true;if(grass.instanceColor)grass.instanceColor.needsUpdate=true;}
+function updGrass(dt){GRASS.t.value+=dt;if(!grass||!grass.visible)return;const c=camera.position;if(Math.hypot(c.x-GRASS.c.x,c.z-GRASS.c.z)>GRASS.R*.3)placeGrass();}
 // ---- sand normal map (ripples) ----
 {const N=256;const hc=new Float32Array(N*N);for(let y=0;y<N;y++)for(let x=0;x<N;x++){hc[y*N+x]=Math.sin((x+Math.sin(y*.09)*9)*.35)*.5+Math.sin((x*.7+y*.3)*.11)*.3+Math.random()*.35;}
  const cv=document.createElement('canvas');cv.width=cv.height=N;const cx=cv.getContext('2d');const im=cx.createImageData(N,N);
@@ -474,7 +499,7 @@ function updEmitters(dt){for(let i=emitters.length-1;i>=0;i--){const e=emitters[
 
 /* ================= GAME STATE ================= */
 let state='menu',time=0,shake=0;
-const pl={pos:new V3(0,0,38.5),vel:new V3(),yaw:0,pitch:0,onG:true,stance:0,eye:1.65,hp:100,lastHurt:-99,ads:0,adsOn:false,sprint:false,cur:0,ws:[],wdef:[],vm:[],reload:0,switchT:0,fireCool:0,nades:4,bob:0,kick:0,melee:0,plant:0,trig:false,lastShot:-9,deaths:0};
+const pl={pos:new V3(0,0,35.2),vel:new V3(),yaw:0,pitch:0,onG:true,stance:0,eye:1.65,hp:100,lastHurt:-99,ads:0,adsOn:false,sprint:false,cur:0,ws:[],wdef:[],vm:[],reload:0,switchT:0,fireCool:0,nades:4,bob:0,kick:0,melee:0,plant:0,trig:false,lastShot:-9,deaths:0};
 const stats={shots:0,hits:0,kills:0,heads:0,start:0,score:0};
 const keys={};let mouseL=false,mouseR=false;
 const enemies=[],allies=[],nades=[];let hitList=[];
@@ -702,7 +727,7 @@ function clearDynamic(){mixers.length=0;if(pModel&&pModel.mixer)mixers.push(pMod
 function resetPlayer(pos,yaw){pl.pos.copy(pos);pl.pos.y=H(pos.x,pos.z);pl.vel.set(0,0,0);pl.yaw=yaw;pl.pitch=0;pl.hp=100;pl.alive=true;pl.stance=0;pl.eye=1.65;pl.ads=0;pl.adsOn=false;pl.reload=0;pl.switchT=0;pl.plant=0;
   pl.cur=0;equip(0,LOADOUT.primary,LOADOUT.att[LOADOUT.primary]);equip(1,LOADOUT.secondary,LOADOUT.att[LOADOUT.secondary]);pl.nades=4;}
 function setupMission(){clearDynamic();
-  mission.phase='intro';mission.kills=0;mission.bunkerDown=false;mission.timer=0;mission.cp={pos:new V3(0,0,38.5),yaw:0,phase:'beach'};
+  mission.phase='intro';mission.kills=0;mission.bunkerDown=false;mission.timer=0;mission.cp={pos:new V3(0,0,35.2),yaw:0,phase:"beach"};
   const T=[[-30,-47],[-21,-47.5],[-12,-47],[-3,-47.2],[12,-47.3],[21,-47],[30,-47.5],[38,-47],[-8,-35],[15,-33]];
   T.forEach(([x,z],i)=>spawnEnemy(x,z,'rifle',{trench:true}));mission.need=T.length;
   spawnEnemy(BK.x,BK.z+1.6,'mg',{counts:false});
@@ -714,7 +739,7 @@ function setupMission(){clearDynamic();
 function startGameplay(){
   if(myBoat.userData.dummies){myBoat.userData.dummies.forEach(d=>myBoat.remove(d));myBoat.userData.dummies=null;}
   myBoat.position.z=44.5;myBoat.userData.ramp.rotation.x=-1.35;
-  resetPlayer(new V3(0,0,38.6),0);
+  resetPlayer(new V3(0,0,35.2),0);
   const tg=[[-9,-11.8],[-4,-11.8],[4,-11.8],[9,-11.8],[14,-11.8],[-14,-11.8]];
   tg.forEach(([x,z],i)=>spawnAlly((i%2?1:-1)*rnd(1.6,2.8),40.5+i*.6,x,z,i*.35,i===2?24:i===4?8:0));
   for(let i=0;i<5;i++)spawnAlly(-20+rnd(-1,1),46+i,-24+i*3,-11.8,i*.5+1,i===1?16:0);
@@ -1175,7 +1200,7 @@ function makeBuilder(root,stat,coll){const C=cmat();
 
 function terrainMesh(Hf,colFn,size=320,seg=150,cx=0,cz=0){const g=new THREE.PlaneGeometry(size,size,seg,seg);g.rotateX(-Math.PI/2);g.translate(cx,0,cz);const p=g.attributes.position,col=new Float32Array(p.count*3),c=new THREE.Color();
   for(let i=0;i<p.count;i++){const x=p.getX(i),z=p.getZ(i),y=Hf(x,z);p.setY(i,y);c.setHex(colFn(x,z,y));const n=.9+Math.random()*.15;col[i*3]=c.r*n;col[i*3+1]=c.g*n;col[i*3+2]=c.b*n;}
-  g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();const m=new THREE.Mesh(g,MAT.sand);m.receiveShadow=true;return m;}
+  g.setAttribute('color',new THREE.BufferAttribute(col,3));g.computeVertexNormals();const m=new THREE.Mesh(g,GROUND);m.receiveShadow=true;return m;}
 const nz=(x,z,a=1)=>(Math.sin(x*.05+z*.03)*1.2+Math.sin(x*.11-z*.07)*.6+Math.sin(x*.023+z*.051)*1.5)*a;
 
 // ---------- level dressing: scatter, craters, puddles, smoke columns, mist ----------
@@ -1521,7 +1546,7 @@ function switchWorld(n){if(n===CUR&&(n===1?!LV:LV))return;
   if(CUR===1&&!LV){if(!M1W)captureM1();M1W.objs.forEach(o=>{o.userData._vis=o.visible;o.visible=false;});}
   disposeLevel();const def=LEVELS[n];CUR=n;HF=def.H;setArmsSkin(!!(LV_ASSETS[n]&&LV_ASSETS[n].arms));
   const root=new THREE.Group();scene.add(root);const st=[],co=[];LV={def,root,statics:st,colliders:co,emit:[],lights:[],oi:-1};
-  const terr=terrainMesh(def.H,def.col);if(def.ground==='cobble'){terr.material=cmat().cobble;}else if(def.snow){terr.material=new THREE.MeshStandardMaterial({color:0xffffff,vertexColors:true,roughness:.92,map:TX.sand,normalMap:MAT.sand.normalMap});}
+  const terr=terrainMesh(def.H,def.col);if(def.ground==='cobble'){terr.material=cmat().cobble;}else if(def.snow){terr.material=GROUND_SNOW;}
   root.add(terr);const B=makeBuilder(root,st,co);skinBuilder(B,root,st,co);def.build(B);if(DECOR[n])DECOR[n](B);flushLODs();levelDressing(def,root);
   statics.length=0;statics.push(...st);colliders.length=0;colliders.push(...co);emitters.length=0;emitters.push(...LV.emit);
   applyEnv(def.env);setWeather(def.weather||null);buildGrass(def.grass?Math.min(def.grass,QUAL[S.quality].grass*1.5|0):0);if(grass&&def.snow)grass.visible=false;rebuildHit();}
@@ -1617,7 +1642,7 @@ let wT=0;const WAVES=[];for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.Pl
 function updWater(dt){wT+=dt;for(const w of WAVES){const k=(wT*.09+w.ph)%1;w.m.position.z=52-k*11.5;w.m.material.opacity=Math.sin(k*Math.PI)*.38;w.m.scale.y=1+k*1.5;}if(!water.visible){foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;return;}const p=water.geometry.attributes.position,b=water.userData.base;for(let i=0;i<p.count;i++){const x=b[i*3],z=b[i*3+2];p.array[i*3+1]=b[i*3+1]+Math.sin(x*.12+wT*1.3)*.18+Math.sin(z*.2-wT*1.7)*.22;}p.needsUpdate=true;if((wT*20|0)%3===0)water.geometry.computeVertexNormals();foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;}
 let last=performance.now(),fpsA=0,fpsN=0,menuT=0;
 let slowT=0;
-function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05,(now-last)/1000);updDRS(dt);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
+function loop(now){requestAnimationFrame(loop);updListener();updGrass(.016);let dt=Math.min(.05,(now-last)/1000);updDRS(dt);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
   if(state!=='pause')time+=dt;
   fpsA+=dt;fpsN++;if(fpsA>.5){if(S.fps)$('fps').textContent=Math.round(fpsN/fpsA)+' FPS';fpsA=fpsN=0;}
   if(state!=='pause'&&state!=='dead'){for(const mx of mixers)mx.update(dt);updWater(dt);updParts(dt);updTracers(dt);updEmitters(dt);updSubs(dt);updAllies(dt);updEnemies(dt);updTanks(dt);updProcRigs(dt);updNades(dt);updMission(dt);}
@@ -1625,7 +1650,7 @@ function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05
   else if(state==='cine'&&cine){updCine(dt);}
   else if(state==='menu'||state==='complete'){menuT+=dt*.04;camera.position.set(Math.sin(menuT)*30+10,5+Math.sin(menuT*.7)*1.5,52+Math.cos(menuT)*8);camera.lookAt(0,6,-30);}
   flashLight.intensity*=Math.exp(-dt*9);
-  const fp=state==='play'?pl.pos:camera.position;sun.target.position.set(fp.x,0,fp.z-10);sun.position.set(fp.x+SUN_DIR.x*150,SUN_DIR.y*150,fp.z+SUN_DIR.z*150);
+  const fp0=state==='play'?pl.pos:camera.position;const sts=90/(sun.shadow.mapSize.x||1024);const fp={x:Math.round(fp0.x/sts)*sts,z:Math.round(fp0.z/sts)*sts};sun.target.position.set(fp.x,0,fp.z-10);sun.position.set(fp.x+SUN_DIR.x*150,SUN_DIR.y*150,fp.z+SUN_DIR.z*150);
   CLOUDS.position.set(camera.position.x,0,camera.position.z);CLOUDS.rotation.y+=dt*.002;
   updShells(dt);updWeather(dt);updDressing(dt);if(FLARE){FLARE.position.copy(camera.position).addScaledVector(SUN_DIR,900);}
   updLoadoutPreview(dt);updGrain(dt);if(water2)water2.material.uniforms.time.value+=dt*.6;
@@ -1633,4 +1658,4 @@ function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05
   if(VM.visible&&state==='play'){renderer.clearDepth();vmCam.fov=lerp(52,40,pl.ads);vmCam.updateProjectionMatrix();renderer.render(vmScene,vmCam);}}
 renderMissions();applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
 Promise.all([loadProps(),loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';})]).then(()=>setTimeout(()=>show('menu'),300));
-window.__game={H,AS,get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
+window.__game={H,AS,get cine(){return cine},get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};

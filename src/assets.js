@@ -27,7 +27,7 @@ function prep(key,scene){
   scene.updateMatrixWorld(true);
   const box=new THREE.Box3().setFromObject(scene);const size=box.getSize(new THREE.Vector3());
   const isTree=/^(oak|pine|snowpine|dead|hedge)$/.test(key);
-  scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=!isTree;const m=o.material;if(m){m.envMapIntensity=.55;if(isTree&&m.transparent){m.transparent=false;m.alphaTest=.45;}if(m.map)m.map.anisotropy=4;}}});
+  scene.traverse(o=>{if(o.isMesh){o.castShadow=true;o.receiveShadow=!isTree;const m=o.material;if(m){m.envMapIntensity=.55;if(isTree&&m.transparent){m.transparent=false;m.alphaTest=.45;}for(const k of ['map','normalMap','roughnessMap','metalnessMap','aoMap'])if(m[k])m[k].anisotropy=16;}}});
   const M={key,scene,box,size,parts:[]};
   // parts: every mesh with its transform relative to the model root (for instancing)
   scene.traverse(o=>{if(o.isMesh)M.parts.push({geo:o.geometry,mat:o.material,mat4:o.matrixWorld.clone(),name:o.name});});
