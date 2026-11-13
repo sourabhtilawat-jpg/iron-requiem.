@@ -18,6 +18,7 @@ import * as AS from './assets.js';
 import {mergeGeometries} from 'three/addons/utils/BufferGeometryUtils.js';
 import {makeDetailTexture,makeGroundMaterial} from './ground.js';
 import {Haptics} from '@capacitor/haptics';
+import {App as CapApp} from '@capacitor/app';
 import {WEAPONS,ATT,ATT_SLOTS,CLASS_NAMES,attAllowed,defaultAtt,effStats,statBars,buildGunVM} from './weapons.js';
 const $=id=>document.getElementById(id);
 const V3=THREE.Vector3;
@@ -1024,8 +1025,47 @@ document.addEventListener('click',e=>{audioInit();const b=e.target.closest('[dat
   if(a==='campaign')show('missions');else if(a==='settings'){settingsFrom='menu';openSettings();}else if(a==='controls')show('controls');
   else if(a==='back'||a==='cback')show('menu');else if(a==='back2'){briefTok++;show('missions');}else if(a==='deploy'){saveLO();deploy();}else if(a==='loadout'){openLoadout(false);}else if(a==='toLoadout'){briefTok++;openLoadout(true);}else if(a==='loBack'){saveLO();show(loFromBrief?'briefing':'menu');}
   else if(a==='sback'){saveS();show(settingsFrom);}else if(a==='sreset'){S=Object.assign({},DEF);applySettings();renderSettings();saveS();}
-  else if(a==='resume')resume();else if(a==='psettings'){settingsFrom='pause';openSettings();}else if(a==='restartcp')restartCP();else if(a==='quit')toMenu();
+  else if(a==='resume')resume();else if(a==='psettings'){settingsFrom='pause';openSettings();}else if(a==='restartcp')restartCP();else if(a==='quit')toMenu();else if(a==='exit')exitGame();else if(a==='hudedit')openHudEditor();
   else if(a==='replay'){hideAll();deploy();}else if(a==='next'){SELECTED=CUR+1;briefing();}else if(a==='credBack'){toMenu();}});
+
+/* ================= EXIT + FULL SCREEN + CUSTOM BUTTON LAYOUT ================= */
+const NATIVE=!!(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform());const ELECTRON=/electron/i.test(navigator.userAgent);
+function exitGame(){try{saveS();}catch(e){}if(NATIVE){CapApp.exitApp();return;}if(ELECTRON){window.close();return;}try{if(document.fullscreenElement)document.exitFullscreen();}catch(e){}toMenu();window.close();}
+if(!NATIVE&&!ELECTRON){const eb=document.getElementById('exitBtn');if(eb)eb.style.display='none';document.querySelectorAll('#pause [data-a=exit]').forEach(b=>b.style.display='none');}
+if(NATIVE){try{CapApp.addListener('backButton',()=>{if(state==='play')pauseGame();else if(state==='pause')resume();else if(state==='menu')exitGame();else toMenu();});}catch(e){}}
+// browser / PWA: go full screen + landscape on the first tap
+function goFull(){if(NATIVE||ELECTRON)return;const d=document.documentElement;try{if(!document.fullscreenElement&&d.requestFullscreen)d.requestFullscreen({navigationUI:'hide'}).then(()=>{try{screen.orientation.lock('landscape').catch(()=>{});}catch(e){}}).catch(()=>{});}catch(e){}}
+if(isTouch)addEventListener('pointerdown',goFull,{capture:true});
+// ---- PUBG-style layout editor: drag any control, set its size and opacity, save / reset ----
+const HUD_IDS=['tFire','tAds','tReload','tNade','tMelee','tSwap','tCrouch','tJump','tSprint','tCam','tPause','tPick','tAct'];
+const HUD_NAMES={tFire:'FIRE',tAds:'AIM',tReload:'RELOAD',tNade:'GRENADE',tMelee:'KNIFE',tSwap:'SWAP',tCrouch:'CROUCH',tJump:'JUMP',tSprint:'SPRINT',tCam:'CAMERA',tPause:'PAUSE',tPick:'PICK UP',tAct:'HOLD ACTION'};
+let HUDL={};try{HUDL=JSON.parse(localStorage.getItem('ir_hud')||'{}')||{};}catch(e){HUDL={};}
+function applyHud(){for(const id of HUD_IDS){const el=$(id);if(!el)continue;const L=HUDL[id];
+  if(L){el.style.left=(L.x*100)+'%';el.style.top=(L.y*100)+'%';el.style.right='auto';el.style.bottom='auto';el.style.margin='0';el.style.transform=`translate(-50%,-50%) scale(${L.s})`;el.style.opacity=L.o;}
+  else{el.style.left=el.style.top=el.style.right=el.style.bottom=el.style.margin=el.style.transform=el.style.opacity='';}}}
+applyHud();
+function defaultRects(){const T=$('touch'),prev={d:T.style.display,v:T.style.visibility};T.style.display='block';T.style.visibility='hidden';const tb=T.getBoundingClientRect();const out={};
+  const saved=HUDL;HUDL={};applyHud();
+  for(const id of HUD_IDS){const el=$(id);const pd=el.style.display;el.style.display='flex';const r=el.getBoundingClientRect();out[id]={x:(r.left+r.width/2-tb.left)/tb.width,y:(r.top+r.height/2-tb.top)/tb.height,w:r.width,h:r.height};el.style.display=pd;}
+  HUDL=saved;applyHud();T.style.display=prev.d;T.style.visibility=prev.v;return {out,tb};}
+let HE=null;
+function openHudEditor(){const {out,tb}=defaultRects();const layer=$('heLayer');layer.innerHTML='';layer.style.cssText=`position:absolute;left:${tb.left}px;top:${tb.top}px;width:${tb.width}px;height:${tb.height}px`;
+  HE={work:{},sel:null,tb,from:state};
+  for(const id of HUD_IDS){const d=out[id];const L=HUDL[id]||{x:d.x,y:d.y,s:1,o:1};HE.work[id]={...L};const g=document.createElement('div');g.className='tb';g.dataset.id=id;g.textContent=$(id).textContent||HUD_NAMES[id];
+    const src=getComputedStyle($(id));g.style.cssText=`width:${d.w}px;height:${d.h}px;border-radius:${src.borderRadius};border-color:${src.borderColor};font-size:${src.fontSize}`;layer.appendChild(g);}
+  const jg=document.createElement('div');jg.id='joyGhost';jg.textContent='MOVE STICK';jg.style.left='9%';jg.style.top='62%';layer.appendChild(jg);
+  heRender();$('hudEdit').classList.add('on');}
+function heRender(){for(const g of $('heLayer').querySelectorAll('.tb')){const L=HE.work[g.dataset.id];g.style.left=(L.x*100)+'%';g.style.top=(L.y*100)+'%';g.style.transform=`translate(-50%,-50%) scale(${L.s})`;g.style.opacity=L.o;g.classList.toggle('sel',HE.sel===g.dataset.id);}
+  const L=HE.sel&&HE.work[HE.sel];$('heName').textContent=HE.sel?HUD_NAMES[HE.sel]:'TAP A BUTTON';if(L){$('heSize').value=L.s;$('heOp').value=L.o;}}
+(()=>{let drag=null;const layer=$('heLayer');
+  layer.addEventListener('pointerdown',e=>{const g=e.target.closest('.tb');if(!g)return;e.preventDefault();HE.sel=g.dataset.id;const r=layer.getBoundingClientRect();const L=HE.work[HE.sel];drag={id:HE.sel,dx:e.clientX-(r.left+L.x*r.width),dy:e.clientY-(r.top+L.y*r.height)};layer.setPointerCapture(e.pointerId);heRender();});
+  layer.addEventListener('pointermove',e=>{if(!drag)return;const r=layer.getBoundingClientRect();const L=HE.work[drag.id];L.x=clamp((e.clientX-drag.dx-r.left)/r.width,.03,.97);L.y=clamp((e.clientY-drag.dy-r.top)/r.height,.04,.96);heRender();});
+  const up=()=>{drag=null;};layer.addEventListener('pointerup',up);layer.addEventListener('pointercancel',up);
+  $('heSize').addEventListener('input',e=>{if(HE&&HE.sel){HE.work[HE.sel].s=+e.target.value;heRender();}});
+  $('heOp').addEventListener('input',e=>{if(HE&&HE.sel){HE.work[HE.sel].o=+e.target.value;heRender();}});
+  $('heReset').addEventListener('click',()=>{HUDL={};const {out}=defaultRects();for(const id of HUD_IDS)HE.work[id]={x:out[id].x,y:out[id].y,s:1,o:1};heRender();});
+  $('heCancel').addEventListener('click',()=>{$('hudEdit').classList.remove('on');applyHud();HE=null;});
+  $('heSave').addEventListener('click',()=>{HUDL=HE.work;try{localStorage.setItem('ir_hud',JSON.stringify(HUDL));}catch(e){}applyHud();$('hudEdit').classList.remove('on');HE=null;SND.click&&SND.click();});})();
 $('skip').addEventListener('click',e=>{e.stopPropagation();endCine(true);});
 $('skip').addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();endCine(true);});
 // settings UI

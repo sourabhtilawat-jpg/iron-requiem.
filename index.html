@@ -3,7 +3,7 @@
 <head>
 <meta charset="utf-8">
 <meta name="theme-color" content="#000000">
-<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
+<meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no,viewport-fit=cover">
 <title>Iron Requiem — Mission 1: Dawn at Omaha</title>
 <style>
 *{box-sizing:border-box;margin:0;padding:0;-webkit-user-select:none;user-select:none;-webkit-tap-highlight-color:transparent}
@@ -193,6 +193,19 @@ body.touch #tPause{top:8px;right:10px}
  #tSprint{width:50px;height:50px;left:20px;bottom:24px}
  .tb{font-size:10px}
 }
+
+/* notch-safe HUD + PUBG-style layout editor */
+#hud,#touch{left:env(safe-area-inset-left,0px)!important;right:env(safe-area-inset-right,0px)!important}
+#hudEdit{position:fixed;inset:0;z-index:60;display:none;background:repeating-linear-gradient(0deg,rgba(255,255,255,.04) 0 1px,transparent 1px 40px),repeating-linear-gradient(90deg,rgba(255,255,255,.04) 0 1px,transparent 1px 40px),rgba(10,10,8,.55)}
+#hudEdit.on{display:block}
+#hudEdit .tb{display:flex!important;cursor:grab;touch-action:none;user-select:none}
+#hudEdit .tb.sel{outline:3px solid #e8b34a;outline-offset:3px}
+#heBar{position:absolute;top:8px;left:50%;transform:translateX(-50%);display:flex;gap:10px;align-items:center;background:rgba(20,18,14,.92);border:1px solid #6b5a3a;padding:8px 12px;font-family:Oswald;color:#eee;font-size:13px;letter-spacing:1px;z-index:2;flex-wrap:wrap;justify-content:center;max-width:96vw}
+#heBar input{width:110px}#heBar button{font-family:Oswald;background:#2a251c;color:#eee;border:1px solid #6b5a3a;padding:6px 12px;letter-spacing:1px}
+#heBar button.p{background:#c4523a;border-color:#c4523a}
+#heName{color:#e8b34a;min-width:70px;text-align:center}
+@media (max-height:520px){#menu .logo{font-size:44px!important;line-height:.95!important;margin-bottom:6px!important}#menu .mlist .mbtn{font-size:19px!important;padding:3px 0!important;margin:0!important}#pause .mbtn{font-size:17px!important;padding:5px 0!important;margin:3px 0!important}#pause h2{margin:0 0 6px!important}}
+#joyGhost{position:absolute;width:120px;height:120px;border-radius:50%;border:2px dashed rgba(255,255,255,.45);display:flex;align-items:center;justify-content:center;color:#fff;font:12px Oswald;letter-spacing:1px}
 </style>
 </head>
 <body>
@@ -252,8 +265,10 @@ body.touch #tPause{top:8px;right:10px}
     <button class="mbtn" data-a="loadout">Loadout</button>
     <button class="mbtn" data-a="settings">Settings</button>
     <button class="mbtn" data-a="controls">Controls</button>
+    <button class="mbtn" data-a="hudedit">Customize Buttons</button>
+    <button class="mbtn" data-a="exit" id="exitBtn">Exit Game</button>
   </div>
-  <div class="ver">Build 0.1 · Mission 1 playable · Best with headphones</div>
+  <div class="ver">Build 0.6 · 10-mission campaign · Best with headphones</div>
 </div>
 
 <div class="scr" id="missions"><div class="dossier">
@@ -314,7 +329,9 @@ body.touch #tPause{top:8px;right:10px}
   <button class="mbtn" data-a="resume">Resume</button>
   <button class="mbtn" data-a="psettings">Settings</button>
   <button class="mbtn" data-a="restartcp">Restart Checkpoint</button>
+  <button class="mbtn" data-a="hudedit">Customize Buttons</button>
   <button class="mbtn" data-a="quit">Quit to Main Menu</button>
+  <button class="mbtn" data-a="exit">Exit Game</button>
 </div></div>
 
 <div class="scr" id="dead">
@@ -333,5 +350,6 @@ body.touch #tPause{top:8px;right:10px}
 
 <script type="module" src="/src/main.js"></script>
 
+<div id="hudEdit"><div id="heBar"><span id="heName">TAP A BUTTON</span><label>SIZE <input type="range" id="heSize" min=".6" max="1.8" step=".05" value="1"></label><label>OPACITY <input type="range" id="heOp" min=".15" max="1" step=".05" value="1"></label><button id="heReset">RESET</button><button id="heCancel">CANCEL</button><button id="heSave" class="p">SAVE</button></div><div id="heLayer"></div></div>
 </body>
 </html>

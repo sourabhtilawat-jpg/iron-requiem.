@@ -53,9 +53,8 @@ jobs:
         run: |
           npx cap add android
           npx cap sync android
-          # landscape + fullscreen game activity
-          sed -i 's/<activity/<activity android:screenOrientation="sensorLandscape" android:hardwareAccelerated="true"/' android/app/src/main/AndroidManifest.xml
-          sed -i 's/AppTheme.NoActionBarLaunch/AppTheme.NoActionBar/' android/app/src/main/AndroidManifest.xml || true
+          # immersive full screen (hide status/nav bars, use notch area), landscape, screen stays on
+          node tools/android-fullscreen.cjs
       - name: Build APK (installable test build)
         working-directory: android
         run: ./gradlew assembleDebug
