@@ -1,7 +1,8 @@
 import * as THREE from 'three';
 import {GLTFLoader} from 'three/addons/loaders/GLTFLoader.js';
 import {MeshoptDecoder} from 'three/addons/libs/meshopt_decoder.module.js';
-const mkLoader=()=>new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);
+const MEXT=import.meta.env.VITE_MEXT||'.glb';
+const mkLoader=()=>{const l=new GLTFLoader().setMeshoptDecoder(MeshoptDecoder);if(MEXT!=='.glb'){const o=l.loadAsync.bind(l);l.loadAsync=(u,...r)=>o(String(u).replace(/\.glb$/,MEXT),...r);}return l;};
 import * as SkeletonUtils from 'three/addons/utils/SkeletonUtils.js';
 import {Sky} from 'three/addons/objects/Sky.js';
 import {Water} from 'three/addons/objects/Water.js';
@@ -1179,7 +1180,7 @@ const LV_ASSETS={
   7:{m:['snowpine','rockSnow','tiger','opel','kubel','halftrack','crates','drum','ammo'],c:['axisW','usW','nightjar'],arms:1},
   8:{m:['belgian','ruinA','church','snowpine','chute','opel','jeep','sherman','panzer','lamp','crates','drum','ammo'],c:['axisW','usW'],arms:1},
   9:{m:['bridge','bridgeTower','ruinB','rock','oak','loco','freight','flak','opel','halftrack','sherman','crates','ammo'],c:['ranger','officer']},
-  10:{m:['snowpine','rockSnow','gate','cellDoor','mapTable','searchlight','opel','kubel','lamp','crates','ammo','radio','docs','drum'],c:['axisW','officer','kessler','nightjar'],arms:1}};
+  10:{m:['snowpine','rockSnow','cellDoor','mapTable','searchlight','opel','kubel','lamp','crates','ammo','radio','docs','drum'],c:['axisW','officer','kessler','nightjar'],arms:1}};
 const LV_TEAM={7:{axis:'axisW',us:'usW'},8:{axis:'axisW',us:'usW'},10:{axis:'axisW'}};
 function teamKey(team){if(team!=='us'&&team!=='axis')return CHAR[team]&&CHAR[team].length?team:(CHAR_FILES[team]?(team==='kessler'||team==='officer'||team==='axisW'?'axis':'us'):team);
   const m=CUR!==1&&LV_TEAM[CUR]&&LV_TEAM[CUR][team];return m&&CHAR[m]&&CHAR[m].length?m:team;}
