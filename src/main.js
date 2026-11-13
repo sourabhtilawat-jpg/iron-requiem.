@@ -27,7 +27,7 @@ const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 /* ================= SETTINGS ================= */
 const DEF={quality:isTouch?'low':'high',fov:78,brightness:1,grade:true,grain:true,vignette:true,shake:true,fps:false,
  sens:1,adsSens:.65,touchSens:1,invertY:false,adsToggle:false,crouchToggle:true,aimAssist:true,
- master:.8,music:.5,sfx:.9,subs:true,difficulty:'regular',camMode:'first-person',slowmo:true,crosshair:true,hitmarkers:true,xpPopups:true,surround:'headphones',bass:true,vibrate:true,vibStrength:1};
+ master:.8,music:.5,sfx:.9,subs:true,difficulty:'regular',camMode:'first-person',slowmo:true,crosshair:true,hitmarkers:true,xpPopups:true,surround:'headphones',sky:isTouch?'painted':'physical',shadows:true,res:'auto',bass:true,vibrate:true,vibStrength:1};
 let S=Object.assign({},DEF);
 try{const s=JSON.parse(localStorage.getItem('ir_settings')||'null');if(s)Object.assign(S,s);}catch(e){}
 function saveS(){try{localStorage.setItem('ir_settings',JSON.stringify(S))}catch(e){}}
@@ -140,7 +140,7 @@ function startMusic(){
 
 /* ================= RENDERER ================= */
 const canvas=$('c');
-const renderer=new THREE.WebGLRenderer({canvas,antialias:!isTouch,powerPreference:'high-performance'});
+const renderer=new THREE.WebGLRenderer({canvas,antialias:true,powerPreference:'high-performance',precision:'highp'});
 renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFilmicToneMapping;
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.autoClear=false;renderer.setClearColor(0x7a7672);
 const scene=new THREE.Scene();
@@ -230,6 +230,32 @@ const water=(()=>{const g=new THREE.PlaneGeometry(500,220,70,30);g.rotateX(-Math
   const m=new THREE.Mesh(g,new THREE.MeshStandardMaterial({color:0x40585e,roughness:.25,metalness:.55,transparent:true,opacity:.93}));m.receiveShadow=true;scene.add(m);
   m.userData.base=Float32Array.from(g.attributes.position.array);return m;})();
 const foam=new THREE.Mesh(new THREE.PlaneGeometry(500,2.2),new THREE.MeshBasicMaterial({color:0xdde4e0,transparent:true,opacity:.35,depthWrite:false}));foam.rotation.x=-Math.PI/2;foam.position.set(0,.03,40.6);scene.add(foam);
+
+// ---- painted sky: CPU-drawn equirect panorama (no sky shader -> no mobile GPU precision artifacts); also feeds PBR reflections ----
+const SKYZ={dawn:0x6a86a6,day:0x4f86c6,overcast:0x868d95,dusk:0x34405e,rain:0x5f676f,snow:0x98a2ac,night:0x070b12,snowNight:0x0e131c};
+let PSKY=null,PENV=null,PMG=null;
+function paintSky(name){const e=ENV[name];if(PSKY){PSKY.dispose();PSKY=null;}if(!e||e.inside)return null;const W=1024,Hh=512;
+  const lift=e.night?1:1.32,z=new THREE.Color(SKYZ[name]??0x5a7aa0).multiplyScalar(lift),h=new THREE.Color(e.fog).multiplyScalar(e.night?1:1.18),sd=SUN_DIR;const su=Math.atan2(sd.z,sd.x)/(2*Math.PI)+.5,sv=Math.asin(clamp(sd.y,-1,1))/Math.PI+.5;
+  const t=ctex(W,Hh,(x)=>{const c=new THREE.Color();for(let yy=0;yy<Hh;yy++){const el=(.5-yy/Hh)*Math.PI;if(el<=0)c.copy(h);else c.copy(h).lerp(z,Math.pow(Math.sin(el),.5));x.fillStyle='#'+c.getHexString();x.fillRect(0,yy,W,1);}
+    // horizon haze band
+    const hz=x.createLinearGradient(0,Hh*.42,0,Hh*.5);hz.addColorStop(0,'rgba(255,255,255,0)');hz.addColorStop(1,'#'+h.getHexString());x.fillStyle=hz;x.fillRect(0,Hh*.42,W,Hh*.08+1);
+    if(e.night){for(let i=0;i<700;i++){const a=Math.random();x.fillStyle=`rgba(255,255,255,${a*a*.9})`;const r=Math.random()<.04?1.6:.8;x.fillRect(Math.random()*W,Math.random()*Hh*.46,r,r);}
+      const mx=(su*W+W*.35)%W,my=Hh*.2;const mg=x.createRadialGradient(mx,my,0,mx,my,60);mg.addColorStop(0,'rgba(220,230,255,.9)');mg.addColorStop(.08,'rgba(200,215,255,.35)');mg.addColorStop(1,'rgba(120,140,200,0)');x.fillStyle=mg;x.fillRect(mx-60,my-60,120,120);}
+    else{const sc=new THREE.Color(e.sun);const sx=su*W,sy=(1-sv)*Hh;for(const ox of[-W,0,W]){const g=x.createRadialGradient(sx+ox,sy,0,sx+ox,sy,Hh*.42);g.addColorStop(0,`rgba(${sc.r*255|0},${sc.g*255|0},${sc.b*255|0},.55)`);g.addColorStop(.06,`rgba(${sc.r*255|0},${sc.g*255|0},${sc.b*255|0},.28)`);g.addColorStop(1,'rgba(0,0,0,0)');x.fillStyle=g;x.fillRect(sx+ox-Hh*.42,sy-Hh*.42,Hh*.84,Hh*.84);
+        const d=x.createRadialGradient(sx+ox,sy,0,sx+ox,sy,7);d.addColorStop(0,'rgba(255,250,235,1)');d.addColorStop(1,'rgba(255,240,210,0)');x.fillStyle=d;x.fillRect(sx+ox-8,sy-8,16,16);}
+      const cloudy=/overcast|rain|snow/.test(name);const n=cloudy?140:70;for(let i=0;i<n;i++){const cx=Math.random()*W,cy=Hh*(.12+Math.random()*.34),rw=rnd(30,cloudy?160:110),rh=rw*rnd(.18,.35);
+        const g=x.createRadialGradient(cx,cy,0,cx,cy,rw);const k=cloudy?rnd(.55,.8):rnd(.8,1);g.addColorStop(0,`rgba(${255*k|0},${250*k|0},${245*k|0},${cloudy?.22:.16})`);g.addColorStop(1,'rgba(255,255,255,0)');x.save();x.translate(cx,cy);x.scale(1,rh/rw);x.translate(-cx,-cy);x.fillStyle=g;x.fillRect(cx-rw,cy-rw,rw*2,rw*2);x.restore();}}});
+  t.mapping=THREE.EquirectangularReflectionMapping;t.colorSpace=THREE.SRGBColorSpace;t.wrapS=THREE.RepeatWrapping;PSKY=t;return t;}
+function applySkyMode(name){const e=ENV[name];if(S.sky==='painted'){sky.visible=false;CLOUDS.visible=false;const t=paintSky(name);scene.background=t;
+    if(t){PMG=PMG||new THREE.PMREMGenerator(renderer);if(PENV)PENV.dispose();PENV=PMG.fromEquirectangular(t);scene.environment=PENV.texture;}}
+  else{scene.background=null;sky.visible=!e.inside;CLOUDS.visible=!e.night;}}
+// ---- resolution: density-aware pixel ratio + dynamic resolution to hold frame rate ----
+const DRS={k:1,slow:0,fast:0,ema:16};
+function basePR(){const d=window.devicePixelRatio||1;const r=S.res;if(r==='sharp')return Math.min(d,2.5);if(r==='balanced')return Math.min(d,1.5);if(r==='performance')return Math.min(d,1)*.8;
+  return Math.min(d,({low:1.15,medium:1.5,high:2,ultra:2.5})[S.quality]||1.5);}
+function updDRS(dt){if(S.res!=='auto'||state!=='play')return;DRS.ema=DRS.ema*.95+dt*1000*.05;if(DRS.ema>24){DRS.slow+=dt;DRS.fast=0;}else if(DRS.ema<17.5){DRS.fast+=dt;DRS.slow=0;}else{DRS.slow=DRS.fast=0;}
+  if(DRS.slow>1.5&&DRS.k>.55){DRS.k=Math.max(.55,DRS.k-.1);DRS.slow=0;renderer.setPixelRatio(basePR()*DRS.k);resize();}
+  else if(DRS.fast>5&&DRS.k<1){DRS.k=Math.min(1,DRS.k+.1);DRS.fast=0;renderer.setPixelRatio(basePR()*DRS.k);resize();}}
 // ---- realistic ocean (medium+) ----
 let water2=null;
 function buildWater2(){if(water2)return;const tex=new THREE.TextureLoader().load(BASE+'textures/waternormals.jpg',t=>{t.wrapS=t.wrapT=THREE.RepeatWrapping;});
@@ -956,7 +982,7 @@ document.addEventListener('click',e=>{audioInit();const b=e.target.closest('[dat
 $('skip').addEventListener('click',e=>{e.stopPropagation();endCine(true);});
 $('skip').addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation();endCine(true);});
 // settings UI
-const SUI={GRAPHICS:[['quality','Quality Preset','sel',['low','medium','high','ultra']],['fov','Field of View','rng',60,110,1],['brightness','Brightness','rng',.6,1.6,.05],['grade','Cinematic Color Grade','tg'],['grain','Film Grain','tg'],['vignette','Vignette','tg'],['shake','Camera Shake','tg'],['fps','FPS Counter','tg']],
+const SUI={GRAPHICS:[['quality','Quality Preset','sel',['low','medium','high','ultra']],['res','Resolution','sel',['auto','sharp','balanced','performance']],['sky','Sky Renderer','sel',['painted','physical']],['shadows','Shadows','tg'],['fov','Field of View','rng',60,110,1],['brightness','Brightness','rng',.6,1.6,.05],['grade','Cinematic Color Grade','tg'],['grain','Film Grain','tg'],['vignette','Vignette','tg'],['shake','Camera Shake','tg'],['fps','FPS Counter','tg']],
   CONTROLS:[['sens','Mouse Sensitivity','rng',.2,3,.05],['adsSens','ADS Sensitivity Multiplier','rng',.2,1.5,.05],['touchSens','Touch Look Sensitivity','rng',.3,3,.05],['invertY','Invert Look (Y-Axis)','tg'],['adsToggle','Toggle ADS (off = hold)','tg'],['crouchToggle','Toggle Crouch','tg'],['aimAssist','Aim Assist (touch)','tg']],
   AUDIO:[['master','Master Volume','rng',0,1,.05],['music','Music Volume','rng',0,1,.05],['sfx','Effects Volume','rng',0,1,.05],['surround','3D Surround Sound','sel',['headphones','speakers','off']],['bass','Cinematic Bass Boost','tg'],['vibrate','Vibration / Rumble','tg'],['vibStrength','Vibration Strength','rng',.2,1,.1],['subs','Subtitles','tg']],
   GAMEPLAY:[['camMode','Camera Mode','sel',['first-person','cinematic']],['slowmo','Cinematic Slow-Motion Kills','tg'],['difficulty','Difficulty','sel',['recruit','regular','hardened','veteran']],['crosshair','Crosshair','tg'],['hitmarkers','Hit Markers','tg'],['xpPopups','Score Popups','tg']]};
@@ -970,10 +996,11 @@ $('stabs').addEventListener('click',e=>{const b=e.target.closest('[data-t]');if(
 $('srows').addEventListener('click',e=>{const b=e.target.closest('.tg');if(b){S[b.dataset.k]=!S[b.dataset.k];b.classList.toggle('on');applySettings();}});
 $('srows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.k)return;S[el.dataset.k]=el.type==='range'?+el.value:el.value;if(el.type==='range')el.nextElementSibling.textContent=(+el.value).toFixed(+el.step<1?2:0);applySettings();});
 let curShadow=-1;
-let curQ=null;function applySettings(){const q=QUAL[S.quality];renderer.setPixelRatio(q.pr);
+let curQ=null,curSky=null;function applySettings(){try{if(curSky!==S.sky&&ENV_CUR){curSky=S.sky;applyEnv(ENV_CUR);}}catch(e){}const q=QUAL[S.quality];renderer.setPixelRatio(basePR());DRS.k=1;
   if(curQ!==S.quality){curQ=S.quality;if(q.ocean)buildWater2();if(water2)water2.visible=!!q.ocean;water.visible=!q.ocean;buildGrass(q.grass);buildComposer(q.post,q.bloom);}
   resize();scene.fog.density=q.fog*(typeof ENV_FOGK==='number'?ENV_FOGK:1);partLimit=q.parts;renderer.toneMappingExposure=S.brightness;
-  if(curShadow!==q.sh){curShadow=q.sh;renderer.shadowMap.enabled=q.sh>0;sun.castShadow=q.sh>0;if(q.sh){sun.shadow.mapSize.set(q.sh,q.sh);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}}scene.traverse(o=>{if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);}});}
+  const qsh=S.shadows?q.sh:0;
+  if(curShadow!==qsh){curShadow=qsh;renderer.shadowMap.enabled=qsh>0;sun.castShadow=qsh>0;if(qsh){sun.shadow.mapSize.set(qsh,qsh);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}}scene.traverse(o=>{if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);}});}
   canvas.classList.toggle('grade',S.grade);$('grain').style.display=S.grain?'block':'none';$('vig').style.display=S.vignette?'block':'none';$('fps').style.display=S.fps?'block':'none';
   if(state==='play'){camera.fov=S.fov;camera.updateProjectionMatrix();}applyVolumes();}
 
@@ -1055,7 +1082,7 @@ const ENV={
 let ENV_CUR='dawn';
 function applyEnv(name){ENV_CUR=name;const e=ENV[name];setReverb(!!(e&&e.inside));const su=sky.material.uniforms;
   su.turbidity.value=e.turb;su.rayleigh.value=e.ray;SUN_DIR.setFromSphericalCoords(1,THREE.MathUtils.degToRad(e.elev),THREE.MathUtils.degToRad(e.az));su.sunPosition.value.copy(SUN_DIR);
-  sky.visible=!e.inside;CLOUDS.visible=!e.night;if(FLARE)FLARE.visible=!e.night&&!e.inside&&name!=='overcast'&&name!=='rain'&&name!=='snow';
+  applySkyMode(name);if(FLARE)FLARE.visible=!e.night&&!e.inside&&name!=='overcast'&&name!=='rain'&&name!=='snow';
   sun.color.setHex(e.sun);sun.intensity=e.sunI;if(e.night){SUN_DIR.set(.3,.8,.4).normalize();}
   hemi.color.setHex(e.hemiS);hemi.groundColor.setHex(e.hemiG);hemi.intensity=e.hemiI;
   scene.fog.color.setHex(e.fog);renderer.setClearColor(e.fog);ENV_FOGK=e.fogK;scene.fog.density=QUAL[S.quality].fog*e.fogK;
@@ -1590,7 +1617,7 @@ let wT=0;const WAVES=[];for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.Pl
 function updWater(dt){wT+=dt;for(const w of WAVES){const k=(wT*.09+w.ph)%1;w.m.position.z=52-k*11.5;w.m.material.opacity=Math.sin(k*Math.PI)*.38;w.m.scale.y=1+k*1.5;}if(!water.visible){foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;return;}const p=water.geometry.attributes.position,b=water.userData.base;for(let i=0;i<p.count;i++){const x=b[i*3],z=b[i*3+2];p.array[i*3+1]=b[i*3+1]+Math.sin(x*.12+wT*1.3)*.18+Math.sin(z*.2-wT*1.7)*.22;}p.needsUpdate=true;if((wT*20|0)%3===0)water.geometry.computeVertexNormals();foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;}
 let last=performance.now(),fpsA=0,fpsN=0,menuT=0;
 let slowT=0;
-function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05,(now-last)/1000);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
+function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05,(now-last)/1000);updDRS(dt);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
   if(state!=='pause')time+=dt;
   fpsA+=dt;fpsN++;if(fpsA>.5){if(S.fps)$('fps').textContent=Math.round(fpsN/fpsA)+' FPS';fpsA=fpsN=0;}
   if(state!=='pause'&&state!=='dead'){for(const mx of mixers)mx.update(dt);updWater(dt);updParts(dt);updTracers(dt);updEmitters(dt);updSubs(dt);updAllies(dt);updEnemies(dt);updTanks(dt);updProcRigs(dt);updNades(dt);updMission(dt);}
