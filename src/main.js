@@ -473,7 +473,8 @@ const mflash=new THREE.Sprite(new THREE.SpriteMaterial({map:PT.flash,blending:TH
 
 /* ================= HUD helpers ================= */
 let subQ=[],subT=0;
-function say(who,text,dur=3.5){subQ.push({who,text,dur});}
+function say(who,text,dur=3.5,id){subQ.push({who,text,dur});playVoice(id||vkey(text));}
+function vkey(t){let h=0x811c9dc5;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return 'v'+h.toString(16).padStart(8,'0');}
 function updSubs(dt){if(subT>0){subT-=dt;if(subT<=0)$('subs').innerHTML='';}if(subT<=0&&subQ.length){const s=subQ.shift();subT=s.dur;if(S.subs)$('subs').innerHTML=(s.who?`<b>${s.who}:</b> `:'')+s.text;SND.ui();}}
 function feed(html){if(!$('feed'))return;const d=document.createElement('div');d.innerHTML=html;$('feed').prepend(d);setTimeout(()=>d.remove(),4000);while($('feed').children.length>5)$('feed').lastChild.remove();}
 function xp(t){if(!S.xpPopups)return;const d=document.createElement('div');d.textContent=t;$('xp').appendChild(d);setTimeout(()=>d.remove(),1400);}
@@ -695,7 +696,7 @@ function playCine(shots,done){if(pModel)pModel.g.visible=false;cine={shots,i:0,t
 function endCine(skip){if(!cine)return;const d=cine.done;const sh=cine.shots;if(skip){for(let i=cine.i;i<sh.length;i++){if(i>cine.i&&sh[i].start)sh[i].start();if(sh[i].end)sh[i].end();}}cine=null;document.body.classList.remove('cine');$('title').style.opacity=0;subQ=[];subT=0;$('subs').innerHTML='';VM.visible=true;d&&d();}
 function updCine(dt){const sh=cine.shots[cine.i];cine.t+=dt;const k=clamp(cine.t/sh.dur,0,1);
   if(sh.cam){const r=sh.cam(k,cine.t);camera.position.copy(r.p);camera.lookAt(r.l);}
-  if(sh.subs)sh.subs.forEach((s,j)=>{const key=cine.i+'_'+j;if(!cine.fired[key]&&cine.t>=s[0]){cine.fired[key]=1;say(s[1],s[2],s[3]||3);}});
+  if(sh.subs)sh.subs.forEach((s,j)=>{const key=cine.i+'_'+j;if(!cine.fired[key]&&cine.t>=s[0]){cine.fired[key]=1;say(s[1],s[2],s[3]||3,s[4]);}});
   if(sh.upd)sh.upd(dt,k,cine.t);
   if(cine.t>=sh.dur){if(sh.end)sh.end();cine.i++;cine.t=0;if(cine.i>=cine.shots.length){endCine(false);}else if(cine.shots[cine.i].start)cine.shots[cine.i].start();}}
 const lp=(a,b,k)=>new V3().lerpVectors(a,b,k);
@@ -1519,7 +1520,7 @@ function showChoice(o){const el=$('choice');el.querySelector('p').textContent=o.
   el.onclick=e=>{const b=e.target.closest('[data-choice]');if(!b)return;o.st.pick=b.dataset.choice;LV.ending=o.st.pick;hideAll();state='play';document.body.classList.add('play');if(!isTouch)reqLock();};}
 function levelIntroCine(def){const s=new V3(def.start[0],0,def.start[1]);s.y=H(s.x,s.z);const a=s.clone().add(new V3(-30,18,30)),b=s.clone().add(new V3(10,6,12)),look=s.clone().add(new V3(0,1,-40));
   return[{dur:6,start:()=>{camera.fov=50;camera.updateProjectionMatrix();levelTitleCard(def);},cam:k=>({p:lp(a,b,ease(k)),l:lp(look.clone().add(new V3(0,10,0)),look,k)}),end:()=>{$('title').style.opacity=0;}},
-    {dur:Math.max(3,(def.introLines||[]).length*3),cam:k=>({p:lp(b,s.clone().add(new V3(1.5,2.2,3)),ease(k)),l:look}),subs:(def.introLines||[]).map((l,i)=>[.3+i*3,l[0],l[1],2.9])}];}
+    {dur:Math.max(3,(def.introLines||[]).length*3),cam:k=>({p:lp(b,s.clone().add(new V3(1.5,2.2,3)),ease(k)),l:look}),subs:(def.introLines||[]).map((l,i)=>[.3+i*3,l[0],l[1],2.9,l[2]])}];}
 function levelTitleCard(def){const L=[def.op,def.title,'Sgt. Elias Kane — 2nd Ranger Battalion',def.date,def.place];const t=$('title');t.innerHTML=L.map((s,i)=>`<div class="l${i===1?' big':''}"></div>`).join('');t.style.opacity=1;const ls=[...t.children];let li=0,ci=0;
   const tick=()=>{if(!cine||li>=ls.length)return;ls[li].textContent=L[li].slice(0,++ci);if(ci%2)SND.click();if(ci>=L[li].length){li++;ci=0;}setTimeout(tick,38);};setTimeout(tick,400);}
 function levelOutroCine(def,lines){const c=pl.pos.clone();return[{dur:Math.max(5,lines.reduce((a,l)=>a+(l[3]||Math.max(2.2,l[1].length/14)),0)+1),start:()=>{camera.fov=50;camera.updateProjectionMatrix();stats.endT=time;},
@@ -1537,7 +1538,9 @@ function levelRestart(){hideAll();const cp=LV.cp||{pos:new V3(LV.def.start[0],0,
 function missionFailed(msg){pl.alive=false;state='dead';exitLock();document.body.classList.remove('play');$('dead').querySelector('h1').textContent='MISSION FAILED';$('deadq').textContent=msg;setTimeout(()=>show('dead'),600);}
 function showCredits(){state='complete';document.body.classList.remove('play','cine');exitLock();PROGRESS.done[10]=1;saveProgress();show('credits');const r=$('credroll');r.style.animation='none';void r.offsetWidth;r.style.animation='';}
 // voiced subtitles: plays audio/<id>.mp3 when present
-const VOICE={};function sayV(who,text,dur,id){say(who,text,dur);if(!id||!A.ctx)return;const url=BASE+'audio/'+id+'.mp3';
+const VOICE={};function sayV(who,text,dur,id){say(who,text,dur,id);}
+let VMAN=null;fetch(BASE+'audio/index.json').then(r=>r.ok?r.json():[]).then(j=>{VMAN=new Set(j);}).catch(()=>{VMAN=new Set();});
+function playVoice(id){if(!id||!A.ctx||!VMAN||!VMAN.has(id))return;const url=BASE+'audio/'+id+'.mp3';
   const play=buf=>{if(!buf)return;const s=A.ctx.createBufferSource();s.buffer=buf;const g=A.ctx.createGain();g.gain.value=1.4;s.connect(g);g.connect(A.sfx);s.start(A.ctx.currentTime+.05);};
   if(VOICE[id]!==undefined){VOICE[id].then(play);return;}VOICE[id]=fetch(url).then(r=>r.ok?r.arrayBuffer():null).then(b=>b?A.ctx.decodeAudioData(b):null).catch(()=>null);VOICE[id].then(play);}
 
