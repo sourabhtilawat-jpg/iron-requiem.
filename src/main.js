@@ -14,6 +14,7 @@ import {Lensflare,LensflareElement} from 'three/addons/objects/Lensflare.js';
 import '@fontsource/oswald/300.css';import '@fontsource/oswald/400.css';import '@fontsource/oswald/600.css';import '@fontsource/oswald/700.css';import '@fontsource/special-elite/400.css';
 const BASE=import.meta.env.BASE_URL;
 import * as AS from './assets.js';
+import {Haptics} from '@capacitor/haptics';
 import {WEAPONS,ATT,ATT_SLOTS,CLASS_NAMES,attAllowed,defaultAtt,effStats,statBars,buildGunVM} from './weapons.js';
 const $=id=>document.getElementById(id);
 const V3=THREE.Vector3;
@@ -25,7 +26,7 @@ const ease=t=>t<.5?2*t*t:1-Math.pow(-2*t+2,2)/2;
 /* ================= SETTINGS ================= */
 const DEF={quality:isTouch?'low':'high',fov:78,brightness:1,grade:true,grain:true,vignette:true,shake:true,fps:false,
  sens:1,adsSens:.65,touchSens:1,invertY:false,adsToggle:false,crouchToggle:true,aimAssist:true,
- master:.8,music:.5,sfx:.9,subs:true,difficulty:'regular',camMode:'first-person',slowmo:true,crosshair:true,hitmarkers:true,xpPopups:true};
+ master:.8,music:.5,sfx:.9,subs:true,difficulty:'regular',camMode:'first-person',slowmo:true,crosshair:true,hitmarkers:true,xpPopups:true,surround:'headphones',bass:true,vibrate:true,vibStrength:1};
 let S=Object.assign({},DEF);
 try{const s=JSON.parse(localStorage.getItem('ir_settings')||'null');if(s)Object.assign(S,s);}catch(e){}
 function saveS(){try{localStorage.setItem('ir_settings',JSON.stringify(S))}catch(e){}}
@@ -38,8 +39,16 @@ function audioInit(){
   if(A.ctx){if(A.ctx.state==='suspended')A.ctx.resume();return;}
   try{A.ctx=new(window.AudioContext||window.webkitAudioContext)();}catch(e){return;}
   const c=A.ctx;
-  A.master=c.createGain();A.master.connect(c.destination);
-  A.sfx=c.createGain();A.sfx.connect(A.master);
+  A.master=c.createGain();
+  // cinematic mastering chain: muffle (shell-shock) -> sub/air EQ -> glue compressor -> brickwall limiter
+  A.muffle=c.createBiquadFilter();A.muffle.type='lowpass';A.muffle.frequency.value=20000;A.muffle.Q.value=.5;
+  A.sub=c.createBiquadFilter();A.sub.type='lowshelf';A.sub.frequency.value=95;A.air=c.createBiquadFilter();A.air.type='highshelf';A.air.frequency.value=7000;A.air.gain.value=2.5;
+  A.comp=c.createDynamicsCompressor();A.comp.threshold.value=-20;A.comp.knee.value=14;A.comp.ratio.value=3.2;A.comp.attack.value=.004;A.comp.release.value=.28;
+  A.lim=c.createDynamicsCompressor();A.lim.threshold.value=-2;A.lim.knee.value=0;A.lim.ratio.value=20;A.lim.attack.value=.001;A.lim.release.value=.08;
+  A.master.connect(A.muffle);A.muffle.connect(A.sub);A.sub.connect(A.air);A.air.connect(A.comp);A.comp.connect(A.lim);A.lim.connect(c.destination);
+  // room/space reverb send (impulse rebuilt per environment)
+  A.rev=c.createConvolver();A.revIn=c.createGain();A.revIn.gain.value=.22;A.revOut=c.createGain();A.revOut.gain.value=.9;A.revIn.connect(A.rev);A.rev.connect(A.revOut);A.revOut.connect(A.master);setReverb(!!(typeof ENV_CUR!=='undefined'&&ENV[ENV_CUR]&&ENV[ENV_CUR].inside));
+  A.sfx=c.createGain();A.sfx.connect(A.master);A.sfx.connect(A.revIn);
   A.mus=c.createGain();A.mus.connect(A.master);
   A.amb=c.createGain();A.amb.connect(A.master);
   const len=c.sampleRate*2;A.noise=c.createBuffer(1,len,c.sampleRate);const d=A.noise.getChannelData(0);for(let i=0;i<len;i++)d[i]=Math.random()*2-1;
@@ -51,16 +60,43 @@ function audioInit(){
   w.connect(wf);wf.connect(wg);wg.connect(A.amb);w.start();
   startMusic();
 }
-function applyVolumes(){if(!A.ctx)return;A.master.gain.value=S.master;A.sfx.gain.value=S.sfx;A.mus.gain.setTargetAtTime(S.music*musicDuck*.8,A.ctx.currentTime,.5);A.amb.gain.value=S.sfx*.5;}
+function applyVolumes(){if(!A.ctx)return;A.master.gain.value=S.master;if(A.sub)A.sub.gain.value=S.bass?6:0;A.sfx.gain.value=S.sfx;A.mus.gain.setTargetAtTime(S.music*musicDuck*.8,A.ctx.currentTime,.5);A.amb.gain.value=S.sfx*.5;}
 function sfxN(o){
   if(!A.ctx)return;const c=A.ctx;const dist=o.dist||0;const t=c.currentTime+(o.delay||0)+dist/1200;
   const att=1/(1+dist*.035);const v=(o.vol||1)*att;if(v<.01)return;const d=o.d||.3;
   const s=c.createBufferSource();s.buffer=A.noise;const f=c.createBiquadFilter();f.type=o.type||'lowpass';f.Q.value=o.q||.7;
   const f0=Math.max(150,(o.f0||3000)/(1+dist*.015));f.frequency.setValueAtTime(f0,t);f.frequency.exponentialRampToValueAtTime(Math.max(40,o.f1||300),t+d);
   const g=c.createGain();g.gain.setValueAtTime(v,t);g.gain.exponentialRampToValueAtTime(.0008,t+d);
-  s.connect(f);f.connect(g);g.connect(A.sfx);s.start(t,Math.random()*1.5);s.stop(t+d+.05);
+  const out=spatial(o,dist,t,d);s.connect(f);f.connect(g);g.connect(out);s.start(t,Math.random()*1.5);s.stop(t+d+.05);
   if(o.thump){const os=c.createOscillator();os.frequency.setValueAtTime(o.tf||110,t);os.frequency.exponentialRampToValueAtTime(30,t+d*.8);const og=c.createGain();og.gain.setValueAtTime(o.thump*att,t);og.gain.exponentialRampToValueAtTime(.0008,t+d);os.connect(og);og.connect(A.sfx);os.start(t);os.stop(t+d+.05);}
 }
+
+// ---- 3D surround: HRTF/equal-power panning per sound, distance-wet reverb, LFE thumps stay centred ----
+A.at=null;
+function spatial(o,dist,t,d){const c=A.ctx;if(S.surround==='off')return A.sfx;let p=o.pos||A.at;
+  if(!p){if(dist<6)return A.sfx;const a=Math.random()*Math.PI*2;p=new V3(camera.position.x+Math.cos(a)*dist,camera.position.y+rnd(0,6),camera.position.z+Math.sin(a)*dist);}
+  const pn=c.createPanner();pn.panningModel=S.surround==='headphones'?'HRTF':'equalpower';pn.distanceModel='inverse';pn.refDistance=1;pn.rolloffFactor=0;
+  if(pn.positionX){pn.positionX.setValueAtTime(p.x,t);pn.positionY.setValueAtTime(p.y,t);pn.positionZ.setValueAtTime(p.z,t);}else pn.setPosition(p.x,p.y,p.z);
+  pn.connect(A.sfx);if(dist>25){const w=c.createGain();w.gain.value=clamp((dist-25)/150,0,.6);pn.connect(w);w.connect(A.revIn);}
+  setTimeout(()=>{try{pn.disconnect();}catch(e){}},(t-c.currentTime+d+.4)*1000);return pn;}
+function at(p,fn){A.at=p;try{fn();}finally{A.at=null;}}
+function setReverb(inside){const c=A.ctx;if(!c||!A.rev)return;const len=c.sampleRate*(inside?1.6:2.6)|0,ir=c.createBuffer(2,len,c.sampleRate);
+  for(let ch=0;ch<2;ch++){const d=ir.getChannelData(ch);for(let i=0;i<len;i++){const tt=i/c.sampleRate;let v=(Math.random()*2-1)*Math.pow(1-i/len,inside?2.2:3.4);
+      if(!inside&&tt>.09&&tt<.35&&Math.random()<.004)v*=6;if(inside&&tt<.08&&Math.random()<.01)v*=4;d[i]=v*(tt<.012?tt/.012:1);}}
+  A.rev.buffer=ir;A.revIn.gain.value=inside?.34:.2;A.revOut.gain.value=inside?1:.85;}
+const _lf=new V3(),_lu=new V3();
+function updListener(){if(!A.ctx||S.surround==='off')return;const L=A.ctx.listener,c=camera,t=A.ctx.currentTime;c.getWorldDirection(_lf);_lu.set(0,1,0).applyQuaternion(c.quaternion);
+  if(L.positionX){L.positionX.setTargetAtTime(c.position.x,t,.02);L.positionY.setTargetAtTime(c.position.y,t,.02);L.positionZ.setTargetAtTime(c.position.z,t,.02);
+    L.forwardX.setTargetAtTime(_lf.x,t,.02);L.forwardY.setTargetAtTime(_lf.y,t,.02);L.forwardZ.setTargetAtTime(_lf.z,t,.02);L.upX.setTargetAtTime(_lu.x,t,.02);L.upY.setTargetAtTime(_lu.y,t,.02);L.upZ.setTargetAtTime(_lu.z,t,.02);}
+  else{L.setPosition(c.position.x,c.position.y,c.position.z);L.setOrientation(_lf.x,_lf.y,_lf.z,_lu.x,_lu.y,_lu.z);}}
+// shell-shock: muffled world + ear ringing after a close blast or heavy hit
+function earShock(k){if(!A.ctx||k<.15)return;const c=A.ctx,t=c.currentTime;const f=A.muffle.frequency;f.cancelScheduledValues(t);f.setValueAtTime(Math.max(380,2400*(1-k)),t);f.exponentialRampToValueAtTime(20000,t+1.2+k*2.4);
+  if(k>.45){const o=c.createOscillator();o.frequency.value=3700+rnd(-200,200);const g=c.createGain();g.gain.setValueAtTime(.0001,t);g.gain.exponentialRampToValueAtTime(.045*k*S.sfx,t+.08);g.gain.exponentialRampToValueAtTime(.0001,t+2.2+k*2);o.connect(g);g.connect(A.lim);o.start(t);o.stop(t+4.6);}}
+// ---- haptics: phone vibration (Capacitor/Android, web) + gamepad rumble (PC) ----
+let lastRumble=0;
+function rumble(ms,str=.6){if(!S.vibrate)return;const now=performance.now();if(now-lastRumble<70)return;lastRumble=now;const k=clamp(str*S.vibStrength,0,1);ms=Math.round(ms*(.5+.5*S.vibStrength));
+  try{if(window.Capacitor&&window.Capacitor.isNativePlatform&&window.Capacitor.isNativePlatform())Haptics.vibrate({duration:ms});else if(navigator.vibrate)navigator.vibrate(k>.75?[ms,40,Math.round(ms*.5)]:ms);}catch(e){}
+  try{for(const gp of (navigator.getGamepads?navigator.getGamepads():[])){if(gp&&gp.vibrationActuator&&gp.vibrationActuator.playEffect)gp.vibrationActuator.playEffect('dual-rumble',{duration:ms,strongMagnitude:k,weakMagnitude:Math.min(1,k*.7+.2)});}}catch(e){}}
 const SND={
   garand:()=>sfxN({f0:5500,f1:180,d:.5,vol:.9,thump:.9,tf:150}),
   thompson:()=>sfxN({f0:3800,f1:300,d:.2,vol:.75,thump:.55,tf:120}),
@@ -543,14 +579,14 @@ function explode(p,big,owner){if(state==='play'){const dd=p.distanceTo(pl.pos);i
   const dist=p.distanceTo(pl.pos);
   if(p.z>40.3&&p.y<.5){emit('bigsplash',p,big?24:14);emit('flash',p.clone().add(new V3(0,1,0)),1);}
   else{emit('flash',p.clone().add(new V3(0,.6,0)),1);emit('fire',p.clone().add(new V3(0,.6,0)),big?16:9);emit('dirt',p,big?22:12);emit('smoke',p.clone().add(new V3(0,1,0)),big?9:5);emit('spark',p,10);}
-  flashLight.position.copy(p).add(new V3(0,2,0));flashLight.intensity=big?2500:1200;SND.boom(dist);
+  flashLight.position.copy(p).add(new V3(0,2,0));flashLight.intensity=big?2500:1200;at(p,()=>SND.boom(dist));if(state==='play'&&dist<(big?40:28)){const k=clamp(1-dist/(big?40:28),0,1);rumble(120+k*380,.3+k*.7);earShock(k*(big?1:.8));}
   if(S.shake)shake=Math.max(shake,clamp(1.2-dist/(big?60:35),0,1));
   if(owner){const R=big?9:7;
     if(dist<R&&state==='play'&&!blocked(p.clone().add(new V3(0,.5,0)),eyePos()))hurt((owner==='enemy'?140*DIFF[S.difficulty].dmg:120)*(1-dist/R),p,true);
     if(owner!=='enemy')damageTanks(p,big);
     if(owner!=='enemy')for(const e of enemies){if(!e.alive)continue;const d=e.pos.distanceTo(p);if(d<R){e.hp-=220*(1-d/R);if(e.hp<=0)killEnemy(e,false,false,true);else hitmark(false);}}}
 }
-function hurt(dmg,src,raw){if(state!=='play'||!pl.alive)return;pl.hp-=raw?dmg:dmg*DIFF[S.difficulty].dmg;pl.lastHurt=time;dmgDir(src);SND.hurt();if(S.shake)shake=Math.max(shake,.25);if(pl.hp<=0)die();}
+function hurt(dmg,src,raw){if(state!=='play'||!pl.alive)return;const _d=raw?dmg:dmg*DIFF[S.difficulty].dmg;pl.hp-=_d;rumble(clamp(60+_d*5,70,420),clamp(.35+_d/60,.35,1));if(_d>=30)earShock(clamp(_d/90,0,.8));pl.lastHurt=time;dmgDir(src);SND.hurt();if(S.shake)shake=Math.max(shake,.25);if(pl.hp<=0)die();}
 function killEnemy(e,head,melee,nade){
   if(!e.alive)return;e.alive=false;e.deathT=0;e.fallDir=Math.random()<.5?1:-1;if(animDie(e.s,head?'dH':nade?'dB':(Math.random()<.55?'dF':'dB')))e.deathT=1;stats.kills++;if(head)stats.heads++;rebuildHit();hitmark(true);
   let pts=100;let tag='';if(head){pts+=50;tag=' <em>(headshot)</em>';if(S.slowmo&&Math.random()<.5)slowT=.45;}if(melee){pts+=50;tag=' <em>(knife)</em>';}if(nade)tag=' <em>(grenade)</em>';stats.score+=pts;
@@ -558,7 +594,7 @@ function killEnemy(e,head,melee,nade){
   if(e.counts&&mission.phase==='trench')mission.kills++;
   if(CUR===1&&e.type==='mg'&&!mission.bunkerDown)setTimeout(()=>{if(!mission.bunkerDown&&state!=='menu')spawnEnemy(BK.x,BK.z+1.6,'mg');},12000);
 }
-function die(){$('dead').querySelector('h1').textContent='K.I.A.';if(pModel&&TP){let t=0;const f=()=>{t+=.06;pModel.rig.rotation.x=-Math.PI/2*ease(Math.min(1,t));pModel.rig.position.y=0;if(t<1)setTimeout(f,16);};f();}pl.alive=false;pl.deaths++;state='dead';exitLock();document.body.classList.remove('play');
+function die(){rumble(650,1);$('dead').querySelector('h1').textContent='K.I.A.';if(pModel&&TP){let t=0;const f=()=>{t+=.06;pModel.rig.rotation.x=-Math.PI/2*ease(Math.min(1,t));pModel.rig.position.y=0;if(t<1)setTimeout(f,16);};f();}pl.alive=false;pl.deaths++;state='dead';exitLock();document.body.classList.remove('play');
   const q=["The beach doesn't care how brave you are. Keep your head down.","Cover is life. Hedgehogs, the tank, the seawall — use them.","Crouched and prone soldiers are much harder to hit.","Grenades clear trenches faster than rifles ever will.","Heads down, keep moving. Standing still in the open gets you killed."];
   $('deadq').textContent=q[Math.floor(Math.random()*q.length)];setTimeout(()=>show('dead'),900);}
 
@@ -608,7 +644,7 @@ function updEnemies(dt){nearDrop=null;nearDropD=9;
       if(!hit){end.add(new V3(rnd(-2,2),rnd(-1.2,1.5),rnd(-2,2)));const d=end.clone().sub(from).normalize();const r=castShot(from,d,dist+30,statics);end=r?r.point:from.clone().addScaledVector(d,dist+30);if(r)impact(r.point,r.terrain);
         if(real&&los&&Math.random()<.35){SND.whiz();}}
       tracer(from,end,e.type==='mg'?0xffb060:0xffd27a);
-      if(e.type==='mg')SND.mg(dist);else SND.eRifle(dist);
+      at(from,()=>{if(e.type==='mg')SND.mg(dist);else SND.eRifle(dist);});
       if(hit)hurt((e.type==='mg'?10:({bolt:34,rifle:20,smg:9,ar:12})[WEAPONS[e.wid].cls]||18)*(.9+.35*(MD()-1))*(e.boss?1.4:1),e.pos);
     }
     if(e.type!=='mg'&&state==='play'&&dist<30&&dist>9&&pl.alive){e.gren-=dt*(1+.35*(MD()-1));if(e.gren<=0){e.gren=rnd(14,24);if(e.s.full)animOnce(e.s,'throw');setTimeout(()=>{if(e.alive)throwNade(true,e);},e.s.full?600:0);}}
@@ -622,7 +658,7 @@ function updAllies(dt){for(const a of allies){
     if(a.doomed&&a.pos.z<a.doomed){a.alive=false;explode(a.pos.clone(),false,null);}continue;}}
   animRun(a.s,0,dt,0,a.crouch);a.s.rig.position.y=a.s.full?0:lerp(a.s.rig.position.y,-a.crouch*(a.s.proc?.38:.65),dt*5);
   a.cool-=dt;const tg=enemies.find(e=>e.alive&&e.pos.distanceTo(a.pos)<90);
-  if(tg){a.g.rotation.y=Math.atan2(tg.pos.x-a.pos.x,tg.pos.z-a.pos.z);if(a.cool<=0){a.cool=rnd(1.5,3.5);if(!a.s.full)a.s.rig.position.y=0;a.s.fireT=.4;const f=new V3();a.s.muz.getWorldPosition(f);const t=tg.pos.clone().add(new V3(rnd(-1.5,1.5),rnd(.5,2.5),rnd(-1.5,1.5)));tracer(f,t);emit('mflash',f,1);SND.eRifle(a.pos.distanceTo(pl.pos));
+  if(tg){a.g.rotation.y=Math.atan2(tg.pos.x-a.pos.x,tg.pos.z-a.pos.z);if(a.cool<=0){a.cool=rnd(1.5,3.5);if(!a.s.full)a.s.rig.position.y=0;a.s.fireT=.4;const f=new V3();a.s.muz.getWorldPosition(f);const t=tg.pos.clone().add(new V3(rnd(-1.5,1.5),rnd(.5,2.5),rnd(-1.5,1.5)));tracer(f,t);emit('mflash',f,1);at(f,()=>SND.eRifle(a.pos.distanceTo(pl.pos)));
     if(Math.random()<.035&&!(mission.phase==='trench'&&tg.counts&&mission.kills>=mission.need-2)){killEnemy(tg,false,false);stats.kills--;stats.score-=100;}}}
 }}
 function updNades(dt){for(let i=nades.length-1;i>=0;i--){const n=nades[i];n.fuse-=dt;n.v.y-=18*dt;n.m.position.addScaledVector(n.v,dt);const p=n.m.position;const g=H(p.x,p.z)+.07;
@@ -919,7 +955,7 @@ $('skip').addEventListener('touchend',e=>{e.preventDefault();e.stopPropagation()
 // settings UI
 const SUI={GRAPHICS:[['quality','Quality Preset','sel',['low','medium','high','ultra']],['fov','Field of View','rng',60,110,1],['brightness','Brightness','rng',.6,1.6,.05],['grade','Cinematic Color Grade','tg'],['grain','Film Grain','tg'],['vignette','Vignette','tg'],['shake','Camera Shake','tg'],['fps','FPS Counter','tg']],
   CONTROLS:[['sens','Mouse Sensitivity','rng',.2,3,.05],['adsSens','ADS Sensitivity Multiplier','rng',.2,1.5,.05],['touchSens','Touch Look Sensitivity','rng',.3,3,.05],['invertY','Invert Look (Y-Axis)','tg'],['adsToggle','Toggle ADS (off = hold)','tg'],['crouchToggle','Toggle Crouch','tg'],['aimAssist','Aim Assist (touch)','tg']],
-  AUDIO:[['master','Master Volume','rng',0,1,.05],['music','Music Volume','rng',0,1,.05],['sfx','Effects Volume','rng',0,1,.05],['subs','Subtitles','tg']],
+  AUDIO:[['master','Master Volume','rng',0,1,.05],['music','Music Volume','rng',0,1,.05],['sfx','Effects Volume','rng',0,1,.05],['surround','3D Surround Sound','sel',['headphones','speakers','off']],['bass','Cinematic Bass Boost','tg'],['vibrate','Vibration / Rumble','tg'],['vibStrength','Vibration Strength','rng',.2,1,.1],['subs','Subtitles','tg']],
   GAMEPLAY:[['camMode','Camera Mode','sel',['first-person','cinematic']],['slowmo','Cinematic Slow-Motion Kills','tg'],['difficulty','Difficulty','sel',['recruit','regular','hardened','veteran']],['crosshair','Crosshair','tg'],['hitmarkers','Hit Markers','tg'],['xpPopups','Score Popups','tg']]};
 let sTab='GRAPHICS';
 function openSettings(){show('settings');renderSettings();}
@@ -1014,7 +1050,7 @@ const ENV={
   interior:{elev:100,az:0,turb:2,ray:.1,sun:0x000000,sunI:0,hemiS:0x6b6458,hemiG:0x2a2620,hemiI:.9,fog:0x14120f,fogK:2.6,exp:1.2,night:1,inside:1}
 };
 let ENV_CUR='dawn';
-function applyEnv(name){ENV_CUR=name;const e=ENV[name];const su=sky.material.uniforms;
+function applyEnv(name){ENV_CUR=name;const e=ENV[name];setReverb(!!(e&&e.inside));const su=sky.material.uniforms;
   su.turbidity.value=e.turb;su.rayleigh.value=e.ray;SUN_DIR.setFromSphericalCoords(1,THREE.MathUtils.degToRad(e.elev),THREE.MathUtils.degToRad(e.az));su.sunPosition.value.copy(SUN_DIR);
   sky.visible=!e.inside;CLOUDS.visible=!e.night;if(FLARE)FLARE.visible=!e.night&&!e.inside&&name!=='overcast'&&name!=='rain'&&name!=='snow';
   sun.color.setHex(e.sun);sun.intensity=e.sunI;if(e.night){SUN_DIR.set(.3,.8,.4).normalize();}
@@ -1279,7 +1315,7 @@ function updTanks(dt){if(!LV||!LV.tanks)return;for(const T of LV.tanks){if(!T.al
     if(T.gun)T.gun.rotation.x=lerp(T.gun.rotation.x,-clamp(Math.atan2(pl.pos.y+1-T.g.position.y-2.2,dist),-.15,.25),dt*2);
     if(state!=='play'||!pl.alive)continue;if(!T.warned&&dist<120){T.warned=true;sayV('SGT. MILLER','Panzer! Rifles won\'t scratch it — hit it with grenades!',3.2,'m_tank');}
     T.cool-=dt;if(T.cool<=0&&dist<150&&Math.abs(((want-(T.turret?T.turret.rotation.y:0)+Math.PI*3)%(Math.PI*2))-Math.PI)<.12){const from=tankMuzzle(T);const eye=eyePos();if(blocked(from,eye)){T.cool=1.2;continue;}
-      T.cool=rnd(6.5,9.5)/Math.sqrt(MD());emit('mflash',from,1);emit('smoke',from,6);emit('dirt',T.g.position.clone(),6);SND.boom(dist*.6);if(S.shake)shake=Math.max(shake,clamp(1-dist/80,0,.6));
+      T.cool=rnd(6.5,9.5)/Math.sqrt(MD());emit('mflash',from,1);emit('smoke',from,6);emit('dirt',T.g.position.clone(),6);at(from,()=>SND.boom(dist*.6));rumble(90,.25);if(S.shake)shake=Math.max(shake,clamp(1-dist/80,0,.6));
       const spread=clamp(dist*.075,1.6,9)/Math.sqrt(MD())*(pl.stance===2?1.4:1)*(pl.sprint?1.5:1);const tgt=pl.pos.clone().add(new V3(rnd(-spread,spread),0,rnd(-spread,spread)));tgt.y=groundAt(tgt.x,tgt.z);
       tracer(from,tgt,0xffc070);setTimeout(()=>{if(state==='play'||state==='pause')explode(tgt,true,'enemy');},Math.min(900,dist*4));}}}
 function damageTanks(p,big){if(!LV||!LV.tanks)return;for(const T of LV.tanks){if(!T.alive)continue;const d=p.distanceTo(T.g.position);if(d>(big?7:5.5))continue;T.hp-=big?2:1.15*(1-d/7)+.35;hitmark(false);
@@ -1551,7 +1587,7 @@ let wT=0;const WAVES=[];for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.Pl
 function updWater(dt){wT+=dt;for(const w of WAVES){const k=(wT*.09+w.ph)%1;w.m.position.z=52-k*11.5;w.m.material.opacity=Math.sin(k*Math.PI)*.38;w.m.scale.y=1+k*1.5;}if(!water.visible){foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;return;}const p=water.geometry.attributes.position,b=water.userData.base;for(let i=0;i<p.count;i++){const x=b[i*3],z=b[i*3+2];p.array[i*3+1]=b[i*3+1]+Math.sin(x*.12+wT*1.3)*.18+Math.sin(z*.2-wT*1.7)*.22;}p.needsUpdate=true;if((wT*20|0)%3===0)water.geometry.computeVertexNormals();foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;}
 let last=performance.now(),fpsA=0,fpsN=0,menuT=0;
 let slowT=0;
-function loop(now){requestAnimationFrame(loop);let dt=Math.min(.05,(now-last)/1000);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
+function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05,(now-last)/1000);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
   if(state!=='pause')time+=dt;
   fpsA+=dt;fpsN++;if(fpsA>.5){if(S.fps)$('fps').textContent=Math.round(fpsN/fpsA)+' FPS';fpsA=fpsN=0;}
   if(state!=='pause'&&state!=='dead'){for(const mx of mixers)mx.update(dt);updWater(dt);updParts(dt);updTracers(dt);updEmitters(dt);updSubs(dt);updAllies(dt);updEnemies(dt);updTanks(dt);updProcRigs(dt);updNades(dt);updMission(dt);}
