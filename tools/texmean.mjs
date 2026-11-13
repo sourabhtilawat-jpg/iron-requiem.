@@ -1,0 +1,3 @@
+import {NodeIO} from '@gltf-transform/core';import {ALL_EXTENSIONS} from '@gltf-transform/extensions';import {MeshoptDecoder} from 'meshoptimizer';import fs from 'fs';
+await MeshoptDecoder.ready;const io=new NodeIO().registerExtensions(ALL_EXTENSIONS).registerDependencies({'meshopt.decoder':MeshoptDecoder});
+const doc=await io.read(process.argv[2]);for(const m of doc.getRoot().listMaterials()){const t=m.getBaseColorTexture();const f=m.getBaseColorFactor();if(t){fs.writeFileSync('/tmp/tex_'+m.getName()+'.'+(t.getMimeType().split('/')[1]),t.getImage());}console.log(m.getName(),f.map(v=>v.toFixed(2)).join(','),t?t.getMimeType():'-');}

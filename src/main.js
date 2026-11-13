@@ -153,6 +153,7 @@ addEventListener('resize',resize);
 /* ---- procedural textures ---- */
 function ctex(w,h,draw,rep){const c=document.createElement('canvas');c.width=w;c.height=h;const x=c.getContext('2d');draw(x,w,h);const t=new THREE.CanvasTexture(c);t.wrapS=t.wrapT=THREE.RepeatWrapping;if(rep)t.repeat.set(rep[0],rep[1]);t.colorSpace=THREE.SRGBColorSpace;t.anisotropy=16;return t;}
 function speck(x,w,h,n,cols,sz){for(let i=0;i<n;i++){x.fillStyle=cols[i%cols.length];x.globalAlpha=Math.random()*.5+.2;const s=Math.random()*sz+1;x.fillRect(Math.random()*w,Math.random()*h,s,s);}x.globalAlpha=1;}
+let EXPO_BASE=1,EXPO_ENV=1;
 const TX={
   sand:ctex(256,256,(x,w,h)=>{x.fillStyle='#bdb3a0';x.fillRect(0,0,w,h);speck(x,w,h,7000,['#9f9582','#d6cdbb','#867c6a','#b0a690'],2);for(let i=0;i<30;i++){x.strokeStyle='rgba(120,110,90,.15)';x.lineWidth=2;x.beginPath();const y=Math.random()*h;x.moveTo(0,y);x.bezierCurveTo(w*.3,y+rnd(-10,10),w*.6,y+rnd(-10,10),w,y);x.stroke();}},[60,45]),
   concrete:ctex(256,256,(x,w,h)=>{x.fillStyle='#8d8a82';x.fillRect(0,0,w,h);speck(x,w,h,5000,['#77746c','#a19e95','#66635c'],3);for(let i=0;i<12;i++){x.fillStyle='rgba(40,35,30,.12)';x.beginPath();x.ellipse(Math.random()*w,Math.random()*h,rnd(10,40),rnd(20,70),0,0,7);x.fill();}x.strokeStyle='rgba(50,50,45,.35)';for(let y=0;y<h;y+=64){x.beginPath();x.moveTo(0,y);x.lineTo(w,y);x.stroke();}},[2,1]),
@@ -1023,7 +1024,7 @@ $('srows').addEventListener('input',e=>{const el=e.target;if(!el.dataset.k)retur
 let curShadow=-1;
 let curQ=null,curSky=null;function applySettings(){try{if(curSky!==S.sky&&ENV_CUR){curSky=S.sky;applyEnv(ENV_CUR);}}catch(e){}const q=QUAL[S.quality];renderer.setPixelRatio(basePR());DRS.k=1;
   if(curQ!==S.quality){curQ=S.quality;if(q.ocean)buildWater2();if(water2)water2.visible=!!q.ocean;water.visible=!q.ocean;buildGrass(q.grass);buildComposer(q.post,q.bloom);}
-  resize();scene.fog.density=q.fog*(typeof ENV_FOGK==='number'?ENV_FOGK:1);partLimit=q.parts;renderer.toneMappingExposure=S.brightness;
+  resize();scene.fog.density=q.fog*(typeof ENV_FOGK==='number'?ENV_FOGK:1);partLimit=q.parts;EXPO_BASE=S.brightness*EXPO_ENV;renderer.toneMappingExposure=EXPO_BASE;
   const qsh=S.shadows?q.sh:0;
   if(curShadow!==qsh){curShadow=qsh;renderer.shadowMap.enabled=qsh>0;sun.castShadow=qsh>0;if(qsh){sun.shadow.mapSize.set(qsh,qsh);if(sun.shadow.map){sun.shadow.map.dispose();sun.shadow.map=null;}}scene.traverse(o=>{if(o.material){(Array.isArray(o.material)?o.material:[o.material]).forEach(m=>m.needsUpdate=true);}});}
   canvas.classList.toggle('grade',S.grade);$('grain').style.display=S.grain?'block':'none';$('vig').style.display=S.vignette?'block':'none';$('fps').style.display=S.fps?'block':'none';
@@ -1111,7 +1112,7 @@ function applyEnv(name){ENV_CUR=name;const e=ENV[name];setReverb(!!(e&&e.inside)
   sun.color.setHex(e.sun);sun.intensity=e.sunI;if(e.night){SUN_DIR.set(.3,.8,.4).normalize();}
   hemi.color.setHex(e.hemiS);hemi.groundColor.setHex(e.hemiG);hemi.intensity=e.hemiI;
   scene.fog.color.setHex(e.fog);renderer.setClearColor(e.fog);ENV_FOGK=e.fogK;scene.fog.density=QUAL[S.quality].fog*e.fogK;
-  renderer.toneMappingExposure=S.brightness*e.exp;Object.values(MAT).forEach(m=>m.envMapIntensity=e.night?.08:.45);}
+  EXPO_ENV=e.exp;EXPO_BASE=S.brightness*e.exp;renderer.toneMappingExposure=EXPO_BASE;Object.values(MAT).forEach(m=>m.envMapIntensity=e.night?.08:.45);}
 let ENV_FOGK=1;
 
 // ---------- weather ----------
@@ -1309,7 +1310,7 @@ function skinBuilder(B,root,stat,coll){const C=cmat();LV.colMeshes=[];LV.noGrass
   const house0=B.house;let hc=0;
   B.house=(x,z,w,d,o={})=>{const key=o.ruined?(hc++%2?'ruinB':'ruinA'):(CUR===7||CUR===8)?'belgian':o.flat?'barn':'farmhouse';if(!AS.has(key))return house0(x,z,w,d,o);
     const M=AS.MODELS[key];const c0=coll.length;const g=house0(x,z,w,d,o);hide(g);unstat(g);coll.length=c0;
-    const s=clamp(Math.min(w/M.size.x,d/M.size.z)*1.06,.72,1.3);put(key,x,H(x,z)-.12,z,o.rot||0,s,{center:true,mesh:true});
+    const s=clamp(Math.min(w/M.size.x,d/M.size.z)*1.06,.72,1.3);let gy=-1e9,ga=0;for(const [ax,az] of [[0,0],[-.45,-.45],[.45,-.45],[-.45,.45],[.45,.45]]){const h=H(x+ax*w,z+az*d);gy=Math.max(gy,h);ga+=h/5;}put(key,x,(gy+ga)/2-.02,z,o.rot||0,s,{center:true,mesh:true});
     if(o.ruined&&AS.has('rubble')&&Math.random()<.7)put('rubble',x+rnd(-w/2,w/2),H(x,z),z+rnd(-d/2,d/2),rnd(0,6),rnd(.9,1.4));return g;};
   // --- church: real nave + bell tower (sniper balcony) ---
   const church0=B.church;
@@ -1346,6 +1347,18 @@ function skinBuilder(B,root,stat,coll){const C=cmat();LV.colMeshes=[];LV.noGrass
     if(AS.has('bridgeTower'))for(const zz of[z0,z1]){put('bridgeTower',x,y-3,zz+(zz>0?3:-3),zz>0?0:Math.PI,[(w+5)/12,1,1],{mesh:true,walk:false});}};
 }
 function skinItem(g){const key=CUR===8?'chute':CUR===6||CUR===10?'docs':'ammo';if(AS.has(key)){g.children.forEach(c=>c.visible=false);const m=AS.clone(key);m.scale.setScalar(key==='chute'?1:1.3);m.position.y=key==='chute'?-.9:-.45;g.add(m);}return g;}
+
+// ---- eye adaptation: step inside a building and exposure slowly opens up; step out and bright daylight blooms back ----
+const FILL=new THREE.AmbientLight(0xe0d6c4,0);scene.add(FILL);
+const EYE={k:1,t:0,inside:0},_ed=new V3(),EYED=[[0,1,0],[.6,.8,0],[-.6,.8,0],[0,.8,.6],[0,.8,-.6],[1,.12,0],[-1,.12,0],[0,.12,1],[0,.12,-1]];
+function updEye(dt){if(!LV||!LV.colMeshes||!LV.colMeshes.length||(ENV[ENV_CUR]&&ENV[ENV_CUR].inside)){if(EYE.k!==1){EYE.k=1;renderer.toneMappingExposure=EXPO_BASE;FILL.intensity=0;}return;}
+  EYE.t-=dt;if(EYE.t<=0){EYE.t=.15;const c=camera.position;const L=nearCols(c.x,c.y,c.z,6);let b=0;if(L.length)for(const d of EYED){_rc.set(c,_ed.set(d[0],d[1],d[2]).normalize());_rc.far=16;if(_rc.intersectObjects(L,false).length)b++;}EYE.inside=b/EYED.length;}
+  const tgt=1+Math.pow(EYE.inside,1.3)*1.2;EYE.k+=(tgt-EYE.k)*Math.min(1,dt*(tgt>EYE.k?.7:1.8));renderer.toneMappingExposure=EXPO_BASE*EYE.k;FILL.intensity=(EYE.k-1)*1.1*hemi.intensity;}
+// ---- clutter: debris, crates and drums gathered along building walls ----
+function clutter(B,n){if(!LV.noGrass||!LV.noGrass.length)return;const keys=[];if([3,4,5,9].includes(CUR))keys.push('rubble','rubble');keys.push('crates','drum','ammo');if(CUR>=3)keys.push('rubble');
+  let placed=0,tries=0;while(placed<n&&tries<n*8){tries++;const r=LV.noGrass[(Math.random()*LV.noGrass.length)|0];const side=(Math.random()*4)|0;const off=rnd(.9,2.2);
+    let x,z;if(side<2){x=rnd(r[0],r[1]);z=side?r[3]+off:r[2]-off;}else{z=rnd(r[2],r[3]);x=side===2?r[1]+off:r[0]-off;}
+    if(!pointFreeRaw(x,z))continue;const k=keys[(Math.random()*keys.length)|0];if(!AS.has(k))continue;B.put(k,x,H(x,z),z,rnd(0,6.28),k==='rubble'?rnd(.8,1.5):k==='ammo'?1.2:1,{stat:k!=='rubble',box:k==='crates'?true:false});placed++;}}
 // extra set dressing per mission (vehicles, props, nests, searchlights)
 const DECOR={
   2:B=>{B.put('jeep',7,H(7,80),78,.5,1,{box:.1});B.put('sherman',-9,H(-9,76),74,.15,1,{box:.2});B.put('radio',2,H(2,-70)+.05,-70.5,0,1,{});for(const x of[-20,26])B.put('mgNest',x,H(x,35.2)-.05,35.2,Math.PI,1,{mesh:true});B.put('ammo',-12,H(-12,36),35.6,.3,1.2,{});},
@@ -1547,7 +1560,7 @@ function switchWorld(n){if(n===CUR&&(n===1?!LV:LV))return;
   disposeLevel();const def=LEVELS[n];CUR=n;HF=def.H;setArmsSkin(!!(LV_ASSETS[n]&&LV_ASSETS[n].arms));
   const root=new THREE.Group();scene.add(root);const st=[],co=[];LV={def,root,statics:st,colliders:co,emit:[],lights:[],oi:-1};
   const terr=terrainMesh(def.H,def.col);if(def.ground==='cobble'){terr.material=cmat().cobble;}else if(def.snow){terr.material=GROUND_SNOW;}
-  root.add(terr);const B=makeBuilder(root,st,co);skinBuilder(B,root,st,co);def.build(B);if(DECOR[n])DECOR[n](B);flushLODs();levelDressing(def,root);
+  root.add(terr);const B=makeBuilder(root,st,co);skinBuilder(B,root,st,co);def.build(B);if(DECOR[n])DECOR[n](B);clutter(B,({3:40,4:34,5:20,6:12,7:10,8:26,9:30,10:16})[n]||14);flushLODs();levelDressing(def,root);
   statics.length=0;statics.push(...st);colliders.length=0;colliders.push(...co);emitters.length=0;emitters.push(...LV.emit);
   applyEnv(def.env);setWeather(def.weather||null);buildGrass(def.grass?Math.min(def.grass,QUAL[S.quality].grass*1.5|0):0);if(grass&&def.snow)grass.visible=false;rebuildHit();}
 
@@ -1642,7 +1655,7 @@ let wT=0;const WAVES=[];for(let i=0;i<3;i++){const m=new THREE.Mesh(new THREE.Pl
 function updWater(dt){wT+=dt;for(const w of WAVES){const k=(wT*.09+w.ph)%1;w.m.position.z=52-k*11.5;w.m.material.opacity=Math.sin(k*Math.PI)*.38;w.m.scale.y=1+k*1.5;}if(!water.visible){foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;return;}const p=water.geometry.attributes.position,b=water.userData.base;for(let i=0;i<p.count;i++){const x=b[i*3],z=b[i*3+2];p.array[i*3+1]=b[i*3+1]+Math.sin(x*.12+wT*1.3)*.18+Math.sin(z*.2-wT*1.7)*.22;}p.needsUpdate=true;if((wT*20|0)%3===0)water.geometry.computeVertexNormals();foam.material.opacity=.25+Math.sin(wT*1.7)*.12;foam.position.z=40.6+Math.sin(wT*.8)*.5;}
 let last=performance.now(),fpsA=0,fpsN=0,menuT=0;
 let slowT=0;
-function loop(now){requestAnimationFrame(loop);updListener();updGrass(.016);let dt=Math.min(.05,(now-last)/1000);updDRS(dt);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
+function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05,(now-last)/1000);updDRS(dt);updGrass(dt);updEye(dt);last=now;if(slowT>0&&state==='play'){slowT-=dt;dt*=.33;}
   if(state!=='pause')time+=dt;
   fpsA+=dt;fpsN++;if(fpsA>.5){if(S.fps)$('fps').textContent=Math.round(fpsN/fpsA)+' FPS';fpsA=fpsN=0;}
   if(state!=='pause'&&state!=='dead'){for(const mx of mixers)mx.update(dt);updWater(dt);updParts(dt);updTracers(dt);updEmitters(dt);updSubs(dt);updAllies(dt);updEnemies(dt);updTanks(dt);updProcRigs(dt);updNades(dt);updMission(dt);}
@@ -1658,4 +1671,4 @@ function loop(now){requestAnimationFrame(loop);updListener();updGrass(.016);let 
   if(VM.visible&&state==='play'){renderer.clearDepth();vmCam.fov=lerp(52,40,pl.ads);vmCam.updateProjectionMatrix();renderer.render(vmScene,vmCam);}}
 renderMissions();applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
 Promise.all([loadProps(),loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';})]).then(()=>setTimeout(()=>show('menu'),300));
-window.__game={H,AS,get cine(){return cine},get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
+window.__game={H,AS,THREE,get EYE(){return EYE},FILL,get cine(){return cine},get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
