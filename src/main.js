@@ -145,7 +145,7 @@ renderer.outputColorSpace=THREE.SRGBColorSpace;renderer.toneMapping=THREE.ACESFi
 renderer.shadowMap.type=THREE.PCFSoftShadowMap;renderer.autoClear=false;renderer.setClearColor(0x7a7672);
 const scene=new THREE.Scene();
 scene.fog=new THREE.FogExp2(0x8c8174,.008);
-const camera=new THREE.PerspectiveCamera(78,innerWidth/innerHeight,.03,1500);camera.rotation.order='YXZ';scene.add(camera);
+const camera=new THREE.PerspectiveCamera(78,innerWidth/innerHeight,.12,1500);camera.rotation.order='YXZ';scene.add(camera);
 function resize(){renderer.setSize(innerWidth,innerHeight,false);try{if(composer)composer.setSize(innerWidth,innerHeight);}catch(e){}camera.aspect=innerWidth/innerHeight;camera.updateProjectionMatrix();try{vmCam.aspect=camera.aspect;vmCam.updateProjectionMatrix();}catch(e){}}
 addEventListener('resize',resize);
 
@@ -208,7 +208,9 @@ const terrain=(()=>{
 const statics=[],colliders=[];
 function addStatic(m,col=true){scene.add(m);m.updateMatrixWorld(true);statics.push(m);if(col){const b=new THREE.Box3().setFromObject(m);colliders.push({minx:b.min.x,maxx:b.max.x,minz:b.min.z,maxz:b.max.z,miny:b.min.y,maxy:b.max.y});}return m;}
 // physical sky
-const sky=new Sky();sky.scale.setScalar(10000);scene.add(sky);
+// mobile-safe sky: keep it just inside the far plane (z=w gets clipped on many phone GPUs), draw it first, never depth-test it
+function safeSky(sk){sk.material.vertexShader=sk.material.vertexShader.replace('gl_Position.z = gl_Position.w;','gl_Position.z = gl_Position.w * 0.9995;');sk.material.depthTest=false;sk.material.depthWrite=false;sk.renderOrder=-1e6;sk.frustumCulled=false;sk.material.needsUpdate=true;return sk;}
+const sky=safeSky(new Sky());sky.scale.setScalar(1000);scene.add(sky);
 const SUN_DIR=new V3();{const su=sky.material.uniforms;su.turbidity.value=9;su.rayleigh.value=2.2;su.mieCoefficient.value=.0045;su.mieDirectionalG.value=.8;
  SUN_DIR.setFromSphericalCoords(1,THREE.MathUtils.degToRad(84),THREE.MathUtils.degToRad(-35));su.sunPosition.value.copy(SUN_DIR);}
 let FLARE=null;{const ft=(r,stops)=>{const t=ctex(r,r,(x)=>{const g=x.createRadialGradient(r/2,r/2,0,r/2,r/2,r/2);stops.forEach(s=>g.addColorStop(s[0],s[1]));x.fillStyle=g;x.fillRect(0,0,r,r);});t.colorSpace=THREE.SRGBColorSpace;return t;};
@@ -234,7 +236,7 @@ function buildWater2(){if(water2)return;const tex=new THREE.TextureLoader().load
   water2=new Water(new THREE.PlaneGeometry(600,260),{textureWidth:512,textureHeight:512,waterNormals:tex,sunDirection:SUN_DIR.clone(),sunColor:0xffd2a0,waterColor:0x1f3a40,distortionScale:2.6,fog:true,alpha:.97});
   water2.rotation.x=-Math.PI/2;water2.position.set(0,-.02,170);scene.add(water2);}
 // ---- environment lighting from the sky (PBR reflections) ----
-{const pm=new THREE.PMREMGenerator(renderer);const es=new THREE.Scene();const s2=new Sky();s2.scale.setScalar(1000);Object.keys(sky.material.uniforms).forEach(k=>s2.material.uniforms[k].value=sky.material.uniforms[k].value);es.add(s2);
+{const pm=new THREE.PMREMGenerator(renderer);const es=new THREE.Scene();const s2=safeSky(new Sky());s2.scale.setScalar(1000);Object.keys(sky.material.uniforms).forEach(k=>s2.material.uniforms[k].value=sky.material.uniforms[k].value);es.add(s2);
   scene.environment=pm.fromScene(es,0,.1,2000).texture;Object.values(MAT).forEach(m=>m.envMapIntensity=.45);}
 // ---- grass on the bluff ----
 let grass=null;
