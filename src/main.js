@@ -579,10 +579,10 @@ function equip(slot,wid,att,full=true){const w=effStats(wid,att);pl.wdef[slot]=w
 const mflash=new THREE.Sprite(softSprite(new THREE.SpriteMaterial({map:PT.flash,blending:THREE.AdditiveBlending,transparent:true,depthWrite:false,fog:false}),{noise:.2,hard:.2}));mflash.visible=false;mflash.scale.setScalar(.35);
 
 /* ================= HUD helpers ================= */
-let subQ=[],subT=0;
-function say(who,text,dur=3.5,id){subQ.push({who,text,dur});playVoice(id||vkey(text));}
+let subQ=[],subT=0,curSub=null;
+function say(who,text,dur=3.5,id){subQ.push({who,text,dur,id:id||vkey(text)});}
 function vkey(t){let h=0x811c9dc5;for(let i=0;i<t.length;i++){h^=t.charCodeAt(i);h=Math.imul(h,0x01000193)>>>0;}return 'v'+h.toString(16).padStart(8,'0');}
-function updSubs(dt){if(subT>0){subT-=dt;if(subT<=0)$('subs').innerHTML='';}if(subT<=0&&subQ.length){const s=subQ.shift();subT=s.dur;if(S.subs)$('subs').innerHTML=(s.who?`<b>${s.who}:</b> `:'')+s.text;SND.ui();}}
+function updSubs(dt){if(subT>0){subT-=dt;if(subT<=0)$('subs').innerHTML='';}if(subT<=0&&subQ.length){const s=subQ.shift();subT=s.dur;playVoice(s.id,d=>{if(curSub===s)subT=Math.max(subT,d+.35-(s.dur-subT));});curSub=s;if(S.subs)$('subs').innerHTML=(s.who?`<b>${s.who}:</b> `:'')+s.text;SND.ui();}}
 function feed(html){if(!$('feed'))return;const d=document.createElement('div');d.innerHTML=html;$('feed').prepend(d);setTimeout(()=>d.remove(),4000);while($('feed').children.length>5)$('feed').lastChild.remove();}
 function xp(t){if(!S.xpPopups)return;const d=document.createElement('div');d.textContent=t;$('xp').appendChild(d);setTimeout(()=>d.remove(),1400);}
 let hitmT=0;function hitmark(kill){if(!S.hitmarkers)return;const h=$('hitm');h.className=kill?'kill':'';h.style.opacity=1;hitmT=.25;SND.hit();}
@@ -1714,8 +1714,8 @@ function showCredits(){state='complete';document.body.classList.remove('play','c
 // voiced subtitles: plays audio/<id>.mp3 when present
 const VOICE={};function sayV(who,text,dur,id){say(who,text,dur,id);}
 let VMAN=null;fetch(BASE+'audio/index.json').then(r=>r.ok?r.json():[]).then(j=>{VMAN=new Set(j);}).catch(()=>{VMAN=new Set();});
-function playVoice(id){if(!id||!A.ctx||!VMAN||!VMAN.has(id))return;const url=BASE+'audio/'+id+'.mp3';
-  const play=buf=>{if(!buf)return;const s=A.ctx.createBufferSource();s.buffer=buf;const g=A.ctx.createGain();g.gain.value=1.4;s.connect(g);g.connect(A.sfx);s.start(A.ctx.currentTime+.05);};
+function playVoice(id,onLen){if(!id||!A.ctx||!VMAN||!VMAN.has(id))return;const url=BASE+'audio/'+id+'.mp3';
+  const play=buf=>{if(!buf)return;if(onLen)onLen(buf.duration);const s=A.ctx.createBufferSource();s.buffer=buf;const g=A.ctx.createGain();g.gain.value=1.4;s.connect(g);g.connect(A.sfx);s.start(A.ctx.currentTime+.05);};
   if(VOICE[id]!==undefined){VOICE[id].then(play);return;}VOICE[id]=fetch(url).then(r=>r.ok?r.arrayBuffer():null).then(b=>b?A.ctx.decodeAudioData(b):null).catch(()=>null);VOICE[id].then(play);}
 
 /* ================= LOOP ================= */
@@ -1741,4 +1741,4 @@ function loop(now){requestAnimationFrame(loop);updListener();let dt=Math.min(.05
   if(VM.visible&&state==='play'){renderer.clearDepth();vmCam.fov=lerp(52,40,pl.ads);vmCam.updateProjectionMatrix();renderer.render(vmScene,vmCam);}}
 renderMissions();applySettings();resize();camera.fov=55;camera.updateProjectionMatrix();VM.visible=false;show('loading');requestAnimationFrame(loop);
 Promise.all([loadProps(),loadCharacters(p=>{$('lbar').style.width=(p*100)+'%';})]).then(()=>setTimeout(()=>show('menu'),300));
-window.__game={H,AS,get hemi(){return hemi},get sun(){return sun},get rnd(){return renderer},get LO(){return LOADOUT},THREE,get EYE(){return EYE},FILL,get cine(){return cine},get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
+window.__game={H,AS,fire:()=>fire(),explode:(x,y,z,b)=>explode(new V3(x,y,z),b,null),get hemi(){return hemi},get sun(){return sun},get rnd(){return renderer},get LO(){return LOADOUT},THREE,get EYE(){return EYE},FILL,get cine(){return cine},get LV(){return LV},get CUR(){return CUR},LEVELS,startLevel,startLevelObjective,switchWorld,lvTarget,WMODELS,mixers,get pModel(){return pModel},get TP(){return TP},hurt,spawnEnemy,CHAR,PROPS,VM,equip,LOADOUT:()=>LOADOUT,camera,scene,pl,mission,enemies,allies,stats,get state(){return state},setState:s=>state=s,startGameplay,setupMission,playCine,introCine,deploy,killEnemy};
